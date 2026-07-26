@@ -1,0 +1,22 @@
+import api from './api';
+
+// Withdrawal management API calls. Adjust endpoint paths to match your backend.
+export async function getWithdrawals(params = {}) {
+  const { data } = await api.get('/withdrawals', { params });
+  return data; // expected shape: { items: [], total: number }
+}
+
+export async function getWithdrawalById(id) {
+  const { data } = await api.get(`/withdrawals/${id}`);
+  return data;
+}
+
+export async function approveWithdrawal(id) {
+  const { data } = await api.post(`/withdrawals/${id}/approve`);
+  return data;
+}
+
+export async function rejectWithdrawal(id, reason) {
+  const { data } = await api.post(`/withdrawals/${id}/reject`, { reason });
+  return data;
+}
