@@ -1,28 +1,29 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Download } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import { usePagination } from '../hooks/usePagination';
 import { useToast } from '../components/common/Toast.jsx';
 import UserFilters from '../components/users/UserFilters.jsx';
 import UserTable from '../components/users/UserTable.jsx';
-import UserDetailsModal from '../components/users/UserDetailsModal.jsx';
 import EditUserModal from '../components/users/EditUserModal.jsx';
 import ConfirmDialog from '../components/common/ConfirmDialog.jsx';
 import Pagination from '../components/common/Pagination.jsx';
 import * as userService from '../services/userService';
 import { searchFilter, filterByStatus, exportToCsv } from '../utils/helpers';
+import { userDetailPath } from '../utils/constants';
 
 export default function Users() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [role, setRole] = useState('all');
 
-  const [detailsUser, setDetailsUser] = useState(null);
   const [editUser, setEditUser] = useState(null);
-  const [confirmAction, setConfirmAction] = useState(null); // { type: 'suspend'|'activate'|'delete', user }
+  const [confirmAction, setConfirmAction] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const { addToast } = useToast();
+  const navigate = useNavigate();
 
   const { data, loading, refetch } = useApi(() => userService.getUsers(), []);
   const allUsers = data?.items || [];
@@ -30,20 +31,12 @@ export default function Users() {
   const filteredUsers = useMemo(() => {
     let result = searchFilter(allUsers, search, ['name', 'email', 'id']);
     result = filterByStatus(result, status);
-    if (role !== 'all') {
-      result = result.filter((u) => u.role === role);
-    }
+    if (role !== 'all') result = result.filter((u) => u.role === role);
     return result;
   }, [allUsers, search, status, role]);
 
-  const {
-    paginatedItems,
-    currentPage,
-    totalPages,
-    totalItems,
-    pageSize,
-    goToPage,
-  } = usePagination(filteredUsers);
+  const { paginatedItems, currentPage, totalPages, totalItems, pageSize, goToPage } =
+    usePagination(filteredUsers);
 
   async function handleSaveUser(id, payload) {
     setSaving(true);
@@ -129,7 +122,7 @@ export default function Users() {
       <UserTable
         users={paginatedItems}
         loading={loading}
-        onView={setDetailsUser}
+        onView={(user) => navigate(userDetailPath(user.id))}
         onEdit={setEditUser}
         onSuspend={(user) => setConfirmAction({ type: 'suspend', user })}
         onActivate={(user) => setConfirmAction({ type: 'activate', user })}
@@ -145,12 +138,6 @@ export default function Users() {
           onPageChange={goToPage}
         />
       )}
-
-      <UserDetailsModal
-        open={Boolean(detailsUser)}
-        onClose={() => setDetailsUser(null)}
-        user={detailsUser}
-      />
 
       <EditUserModal
         open={Boolean(editUser)}
