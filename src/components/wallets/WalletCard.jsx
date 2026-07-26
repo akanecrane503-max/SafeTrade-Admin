@@ -1,8 +1,8 @@
-import { Wallet, Pencil, Power } from 'lucide-react';
+import { Wallet, Pencil, Power, QrCode } from 'lucide-react';
 import { formatCurrency, formatCrypto } from '../../utils/formatters';
 import { cn } from '../../utils/helpers';
 
-export default function WalletCard({ wallet, onEdit, onToggle }) {
+export default function WalletCard({ wallet, onEdit, onToggle, onViewQr }) {
   const isEnabled = wallet.enabled;
 
   return (
@@ -34,9 +34,18 @@ export default function WalletCard({ wallet, onEdit, onToggle }) {
       </div>
 
       <div className="space-y-3 mb-4 flex-1">
-        <div>
-          <p className="text-xs text-slate-500 mb-1">Hot wallet address</p>
-          <p className="text-xs font-mono text-slate-300 break-all">{wallet.address}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs text-slate-500 mb-1">Hot wallet address</p>
+            <p className="text-xs font-mono text-slate-300 break-all">{wallet.address}</p>
+          </div>
+          <button
+            onClick={() => onViewQr(wallet)}
+            className="shrink-0 w-8 h-8 rounded-lg bg-slate-800/60 flex items-center justify-center hover:bg-slate-800 transition-colors"
+            title="View QR code"
+          >
+            <QrCode className="w-4 h-4 text-slate-400" />
+          </button>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
