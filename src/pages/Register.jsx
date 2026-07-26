@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { ShieldCheck, Mail, Lock, User, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { ROUTES } from '../utils/constants';
+import { addAccessRequest } from '../lib/accessRequests';
 
 export default function Register() {
   const [submitted, setSubmitted] = useState(false);
@@ -21,12 +22,11 @@ export default function Register() {
 
   const password = watch('password');
 
-  const onSubmit = async () => {
+  const onSubmit = async (data) => {
     setSubmitError('');
     try {
       // Access requests are reviewed by a main admin before an account is activated.
-      // No backend is wired up yet — this just confirms the request was captured.
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      addAccessRequest({ fullName: data.fullName, email: data.email });
       setSubmitted(true);
     } catch {
       setSubmitError('Something went wrong submitting your request. Please try again.');
