@@ -2,8 +2,8 @@ import { Routes, Route } from 'react-router-dom';
 import ProtectedRoute from './ProtectedRoute.jsx';
 import PageLayout from '../layout/PageLayout.jsx';
 import { ROUTES } from '../utils/constants';
-
 import Login from '../pages/Login.jsx';
+import Register from '../pages/Register.jsx';
 import ForgotPassword from '../pages/ForgotPassword.jsx';
 import Dashboard from '../pages/Dashboard.jsx';
 import Users from '../pages/Users.jsx';
@@ -24,8 +24,8 @@ export default function AppRoutes() {
   return (
     <Routes>
       <Route path={ROUTES.LOGIN} element={<Login />} />
+      <Route path={ROUTES.REGISTER} element={<Register />} />
       <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPassword />} />
-
       <Route element={<ProtectedRoute />}>
         <Route element={<PageLayout />}>
           <Route path={ROUTES.DASHBOARD} element={<Dashboard />} />
@@ -43,7 +43,6 @@ export default function AppRoutes() {
           <Route path={ROUTES.SYSTEM_CONTROL} element={<SystemControl />} />
         </Route>
       </Route>
-
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
