@@ -1,9 +1,8 @@
 import api from './api';
 
-// Wallet management API calls. Adjust endpoint paths to match your backend.
 export async function getWallets(params = {}) {
   const { data } = await api.get('/wallets', { params });
-  return data; // expected shape: { items: [] }
+  return data;
 }
 
 export async function getWalletById(id) {
@@ -18,5 +17,13 @@ export async function updateWallet(id, payload) {
 
 export async function toggleWalletStatus(id, enabled) {
   const { data } = await api.post(`/wallets/${id}/toggle`, { enabled });
+  return data;
+}
+
+// Accepts a FormData instance containing the 'qrCode' file field.
+export async function uploadWalletQr(id, formData) {
+  const { data } = await api.post(`/wallets/${id}/qr-code`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return data;
 }
