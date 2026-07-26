@@ -28,6 +28,19 @@ export function useAuth() {
     }
   }, []);
 
+  const signUp = useCallback(async (email, password, name) => {
+    setLoading(true);
+    setError(null);
+    try {
+      return await authService.register({ email, password, name });
+    } catch (err) {
+      setError(err.message || 'Registration failed');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const signOut = useCallback(() => {
     authService.logout();
     setUser(null);
@@ -52,6 +65,7 @@ export function useAuth() {
     loading,
     error,
     signIn,
+    signUp,
     signOut,
     requestReset,
   };
