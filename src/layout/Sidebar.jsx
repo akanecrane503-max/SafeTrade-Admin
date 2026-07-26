@@ -12,6 +12,9 @@ import {
   ChevronsLeft,
   ChevronsRight,
   ShieldCheck,
+  UserCog,
+  ClipboardList,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { ROUTES } from '../utils/constants';
 import { cn } from '../utils/helpers';
@@ -25,13 +28,15 @@ const NAV_ITEMS = [
   { label: 'Trades', icon: LineChart, path: ROUTES.TRADES },
   { label: 'Announcements', icon: Megaphone, path: ROUTES.ANNOUNCEMENTS },
   { label: 'Reports', icon: FileBarChart, path: ROUTES.REPORTS },
+  { label: 'Admin Management', icon: UserCog, path: ROUTES.ADMIN_MANAGEMENT },
+  { label: 'Activity Log', icon: ClipboardList, path: ROUTES.ACTIVITY_LOG },
+  { label: 'System Control', icon: SlidersHorizontal, path: ROUTES.SYSTEM_CONTROL },
   { label: 'Settings', icon: Settings, path: ROUTES.SETTINGS },
 ];
 
 export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
   return (
     <>
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div
           className="fixed inset-0 bg-black/60 z-40 lg:hidden"
@@ -48,7 +53,6 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
-        {/* Logo / brand */}
         <div className="h-16 flex items-center gap-2 px-4 border-b border-slate-800 shrink-0">
           <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
             <ShieldCheck className="w-5 h-5 text-white" />
@@ -60,7 +64,6 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
           )}
         </div>
 
-        {/* Nav items */}
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
           {NAV_ITEMS.map(({ label, icon: Icon, path }) => (
             <NavLink
@@ -91,7 +94,6 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
           ))}
         </nav>
 
-        {/* Collapse toggle (desktop only) */}
         <div className="p-3 border-t border-slate-800 hidden lg:block">
           <button
             onClick={onToggle}
