@@ -44,7 +44,21 @@ export default function AnnouncementEditor({ open, onClose, announcement, onSave
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={announcement ? 'Edit Announcement' : 'New Announcement'}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={announcement ? 'Edit Announcement' : 'New Announcement'}
+      footer={
+        <>
+          <button onClick={onClose} className="btn-secondary">
+            Cancel
+          </button>
+          <button onClick={handleSubmit} disabled={saving} className="btn-primary">
+            {saving ? 'Saving...' : 'Save Announcement'}
+          </button>
+        </>
+      }
+    >
       <div className="space-y-4">
         <div>
           <label className="block text-xs font-medium text-slate-400 mb-2">Title</label>
@@ -100,15 +114,6 @@ export default function AnnouncementEditor({ open, onClose, announcement, onSave
                 form.published ? 'translate-x-5' : ''
               }`}
             />
-          </button>
-        </div>
-
-        <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className="btn-secondary">
-            Cancel
-          </button>
-          <button onClick={handleSubmit} disabled={saving} className="btn-primary">
-            {saving ? 'Saving...' : 'Save Announcement'}
           </button>
         </div>
       </div>
