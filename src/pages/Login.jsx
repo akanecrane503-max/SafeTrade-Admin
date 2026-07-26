@@ -109,6 +109,12 @@ export default function Login() {
         <p className="text-center text-xs text-slate-600 mt-6">
           Protected admin area — authorized personnel only.
         </p>
+        <p className="text-center text-xs text-slate-600 mt-3">
+          Need access?{' '}
+          <Link to={ROUTES.REGISTER} className="text-blue-500 hover:text-blue-400">
+            Request an account
+          </Link>
+        </p>
       </div>
     </div>
   );
