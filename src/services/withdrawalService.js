@@ -1,9 +1,13 @@
 import api from './api';
 
-// Withdrawal management API calls. Adjust endpoint paths to match your backend.
 export async function getWithdrawals(params = {}) {
   const { data } = await api.get('/withdrawals', { params });
-  return data; // expected shape: { items: [], total: number }
+  return data;
+}
+
+// params.type: 'internal' | 'external'
+export async function getUserWithdrawals(userId, params = {}) {
+  return getWithdrawals({ ...params, userId });
 }
 
 export async function getWithdrawalById(id) {
