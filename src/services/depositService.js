@@ -1,9 +1,14 @@
 import api from './api';
 
-// Deposit management API calls. Adjust endpoint paths to match your backend.
 export async function getDeposits(params = {}) {
   const { data } = await api.get('/deposits', { params });
-  return data; // expected shape: { items: [], total: number }
+  return data;
+}
+
+// Convenience wrapper for a single user's deposits, used by the
+// user detail page's Deposits tab.
+export async function getUserDeposits(userId, params = {}) {
+  return getDeposits({ ...params, userId });
 }
 
 export async function getDepositById(id) {
