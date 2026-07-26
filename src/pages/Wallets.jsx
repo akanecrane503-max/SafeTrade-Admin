@@ -3,6 +3,7 @@ import { useApi } from '../hooks/useApi';
 import { useToast } from '../components/common/Toast.jsx';
 import WalletCard from '../components/wallets/WalletCard.jsx';
 import WalletEditorModal from '../components/wallets/WalletEditorModal.jsx';
+import WalletQrModal from '../components/wallets/WalletQrModal.jsx';
 import ConfirmDialog from '../components/common/ConfirmDialog.jsx';
 import LoadingSpinner from '../components/common/LoadingSpinner.jsx';
 import EmptyState from '../components/common/EmptyState.jsx';
@@ -10,6 +11,7 @@ import * as walletService from '../services/walletService';
 
 export default function Wallets() {
   const [editWallet, setEditWallet] = useState(null);
+  const [qrWallet, setQrWallet] = useState(null);
   const [confirmWallet, setConfirmWallet] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -54,7 +56,7 @@ export default function Wallets() {
       <div>
         <h1 className="text-2xl font-bold text-white">Wallet Management</h1>
         <p className="text-sm text-slate-500 mt-1">
-          Configure hot wallets, withdrawal limits, and network fees.
+          Configure hot wallets, withdrawal limits, network fees, and QR codes.
         </p>
       </div>
 
@@ -74,6 +76,7 @@ export default function Wallets() {
               wallet={wallet}
               onEdit={setEditWallet}
               onToggle={setConfirmWallet}
+              onViewQr={setQrWallet}
             />
           ))}
         </div>
@@ -85,6 +88,13 @@ export default function Wallets() {
         wallet={editWallet}
         onSave={handleSaveWallet}
         saving={saving}
+      />
+
+      <WalletQrModal
+        open={Boolean(qrWallet)}
+        onClose={() => setQrWallet(null)}
+        wallet={qrWallet}
+        onRefetch={refetch}
       />
 
       <ConfirmDialog
