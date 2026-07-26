@@ -1,43 +1,19 @@
-import api from './api';
-import { AUTH_TOKEN_KEY, AUTH_USER_KEY } from '../utils/constants';
-
-// Wraps auth-related API calls and local token/user persistence.
-// Swap the endpoint paths for your real backend routes.
-export async function login(email, password) {
-  const { data } = await api.post('/auth/login', { email, password });
-
-  if (data?.token) {
-    localStorage.setItem(AUTH_TOKEN_KEY, data.token);
-  }
-  if (data?.user) {
-    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user));
-  }
-
+export async function register(payload) {
+  const { data } = await api.post('/auth/register', payload);
   return data;
 }
 
-export async function requestPasswordReset(email) {
-  const { data } = await api.post('/auth/forgot-password', { email });
+export async function getPendingAdmins() {
+  const { data } = await api.get('/admin/pending');
   return data;
 }
 
-export function logout() {
-  localStorage.removeItem(AUTH_TOKEN_KEY);
-  localStorage.removeItem(AUTH_USER_KEY);
+export async function approveAdmin(id) {
+  const { data } = await api.post(`/admin/pending/${id}/approve`);
+  return data;
 }
 
-export function getStoredUser() {
-  try {
-    return JSON.parse(localStorage.getItem(AUTH_USER_KEY) || 'null');
-  } catch {
-    return null;
-  }
-}
-
-export function getToken() {
-  return localStorage.getItem(AUTH_TOKEN_KEY);
-}
-
-export function isAuthenticated() {
-  return Boolean(getToken());
+export async function rejectAdmin(id) {
+  const { data } = await api.post(`/admin/pending/${id}/reject`);
+  return data;
 }
