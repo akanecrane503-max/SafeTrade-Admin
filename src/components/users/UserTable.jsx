@@ -38,7 +38,9 @@ export default function UserTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-800 text-left">
+              <th className="px-4 py-3 font-medium text-slate-500">UID</th>
               <th className="px-4 py-3 font-medium text-slate-500">User</th>
+              <th className="px-4 py-3 font-medium text-slate-500">Country</th>
               <th className="px-4 py-3 font-medium text-slate-500">Role</th>
               <th className="px-4 py-3 font-medium text-slate-500">Status</th>
               <th className="px-4 py-3 font-medium text-slate-500">Joined</th>
@@ -48,6 +50,7 @@ export default function UserTable({
           <tbody className="divide-y divide-slate-800/60">
             {users.map((user) => (
               <tr key={user.id} className="hover:bg-slate-800/30 transition-colors">
+                <td className="px-4 py-3 text-slate-400">{user.uid ?? '—'}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-semibold shrink-0">
@@ -61,6 +64,7 @@ export default function UserTable({
                     </div>
                   </div>
                 </td>
+                <td className="px-4 py-3 text-slate-400">{user.country || '—'}</td>
                 <td className="px-4 py-3 text-slate-400 capitalize">
                   {user.role?.replace('_', ' ') || '—'}
                 </td>
