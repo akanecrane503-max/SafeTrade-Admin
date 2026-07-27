@@ -25,7 +25,7 @@ export default function Users() {
   const { addToast } = useToast();
   const navigate = useNavigate();
 
-  const { data, loading, refetch } = useApi(() => userService.getUsers(), []);
+  const { data, loading, error, refetch } = useApi(() => userService.getUsers(), []);
   const allUsers = data?.items || [];
 
   const filteredUsers = useMemo(() => {
@@ -119,17 +119,27 @@ export default function Users() {
         onRoleChange={setRole}
       />
 
-      <UserTable
-        users={paginatedItems}
-        loading={loading}
-        onView={(user) => navigate(userDetailPath(user.id))}
-        onEdit={setEditUser}
-        onSuspend={(user) => setConfirmAction({ type: 'suspend', user })}
-        onActivate={(user) => setConfirmAction({ type: 'activate', user })}
-        onDelete={(user) => setConfirmAction({ type: 'delete', user })}
-      />
+      {error ? (
+        <div className="card py-10 text-center">
+          <p className="text-red-400 font-medium">Failed to load users</p>
+          <p className="text-sm text-slate-500 mt-1">{error}</p>
+          <button onClick={refetch} className="btn-secondary mt-4">
+            Try again
+          </button>
+        </div>
+      ) : (
+        <UserTable
+          users={paginatedItems}
+          loading={loading}
+          onView={(user) => navigate(userDetailPath(user.id))}
+          onEdit={setEditUser}
+          onSuspend={(user) => setConfirmAction({ type: 'suspend', user })}
+          onActivate={(user) => setConfirmAction({ type: 'activate', user })}
+          onDelete={(user) => setConfirmAction({ type: 'delete', user })}
+        />
+      )}
 
-      {!loading && totalItems > 0 && (
+      {!loading && !error && totalItems > 0 && (
         <Pagination
           currentPage={currentPage}
           totalPages={totalPages}
