@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAdminAuth } from '../context/AdminAuthContext.jsx';
 import { ROUTES } from '../utils/constants';
 
-export default function ProtectedRoute() {
+export default function ProtectedRoute({ requireRole }) {
   const { adminUser, sessionLoading } = useAdminAuth();
   const location = useLocation();
 
@@ -16,6 +16,10 @@ export default function ProtectedRoute() {
 
   if (!adminUser) {
     return <Navigate to={ROUTES.LOGIN} state={{ from: location }} replace />;
+  }
+
+  if (requireRole && adminUser.role !== requireRole) {
+    return <Navigate to={ROUTES.DASHBOARD} replace />;
   }
 
   return <Outlet />;
