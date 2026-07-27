@@ -1,8 +1,28 @@
 import api from './api';
+import { supabase } from '../lib/supabase';
 
 export async function getUsers(params = {}) {
-  const { data } = await api.get('/users', { params });
-  return data;
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, uid, full_name, email, country, role, status, created_at')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const items = (data || []).map((row) => ({
+    id: row.id,
+    uid: row.uid,
+    name: row.full_name,
+    email: row.email,
+    country: row.country,
+    role: row.role,
+    status: row.status,
+    createdAt: row.created_at,
+  }));
+
+  return { items };
 }
 
 export async function getUserById(id) {
