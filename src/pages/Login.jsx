@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { ShieldCheck, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
+import { useAdminAuth } from '../context/AdminAuthContext.jsx';
 import { ROUTES } from '../utils/constants';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const { signIn, loading, error } = useAuth();
+  const { signIn, signingIn, error } = useAdminAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -19,7 +19,7 @@ export default function Login() {
       const redirectTo = location.state?.from?.pathname || ROUTES.DASHBOARD;
       navigate(redirectTo, { replace: true });
     } catch {
-      // error state is already handled by useAuth
+      // error state is already handled by useAdminAuth
     }
   }
 
@@ -98,10 +98,10 @@ export default function Login() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={signingIn}
               className="btn-primary w-full py-2.5 mt-2"
             >
-              {loading ? 'Signing in...' : 'Sign in'}
+              {signingIn ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
         </div>
