@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { ShieldCheck, Mail, Lock, User, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { ROUTES } from '../utils/constants';
-import { addAccessRequest } from '../lib/accessRequests';
+import { registerPendingAdmin } from '../services/adminService';
 
 export default function Register() {
   const [submitted, setSubmitted] = useState(false);
@@ -25,11 +25,14 @@ export default function Register() {
   const onSubmit = async (data) => {
     setSubmitError('');
     try {
-      // Access requests are reviewed by a main admin before an account is activated.
-      addAccessRequest({ fullName: data.fullName, email: data.email });
+      await registerPendingAdmin({
+        fullName: data.fullName,
+        email: data.email,
+        password: data.password,
+      });
       setSubmitted(true);
-    } catch {
-      setSubmitError('Something went wrong submitting your request. Please try again.');
+    } catch (err) {
+      setSubmitError(err.message || 'Something went wrong submitting your request. Please try again.');
     }
   };
 
