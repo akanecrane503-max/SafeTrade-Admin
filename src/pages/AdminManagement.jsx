@@ -3,7 +3,6 @@ import { Plus, UserPlus, Check, X, Clock } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import { usePagination } from '../hooks/usePagination';
 import { useToast } from '../components/common/Toast.jsx';
-import { useAccessRequests } from '../hooks/useAccessRequests';
 import SearchBar from '../components/common/SearchBar.jsx';
 import Dropdown from '../components/common/Dropdown.jsx';
 import Pagination from '../components/common/Pagination.jsx';
@@ -11,7 +10,6 @@ import ConfirmDialog from '../components/common/ConfirmDialog.jsx';
 import AdminTable from '../components/admin/AdminTable.jsx';
 import AdminFormModal from '../components/admin/AdminFormModal.jsx';
 import * as adminService from '../services/adminService';
-import { approveAccessRequest, rejectAccessRequest } from '../lib/accessRequests';
 import { searchFilter } from '../utils/helpers';
 import { ADMIN_ROLES } from '../utils/constants';
 
@@ -21,9 +19,7 @@ const ROLE_OPTIONS = [
 ];
 
 function PendingAccessRequests({ requests, onApprove, onReject }) {
-  const pending = requests.filter((r) => r.status === 'pending');
-
-  if (pending.length === 0) return null;
+  if (requests.length === 0) return null;
 
   return (
     <div className="card p-5">
@@ -35,18 +31,17 @@ function PendingAccessRequests({ requests, onApprove, onReject }) {
           <h2 className="text-sm font-semibold text-white">
             Pending Access Requests
             <span className="ml-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-amber-500/20 text-amber-400 text-xs font-bold">
-              {pending.length}
+              {requests.length}
             </span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            No backend yet — approving marks a request as reviewed, it doesn&apos;t create a working
-            login. There is only one admin account until real auth is wired up.
+            Approving grants immediate dashboard access. Rejecting blocks sign-in.
           </p>
         </div>
       </div>
 
       <div className="space-y-2">
-        {pending.map((req) => (
+        {requests.map((req) => (
           <div
             key={req.id}
             className="flex items-center justify-between gap-3 rounded-xl bg-slate-800/60 border border-slate-700 px-4 py-3"
@@ -63,7 +58,7 @@ function PendingAccessRequests({ requests, onApprove, onReject }) {
               <button
                 onClick={() => onApprove(req.id)}
                 className="w-8 h-8 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 flex items-center justify-center transition-colors"
-                title="Mark as approved"
+                title="Approve"
               >
                 <Check className="w-4 h-4" />
               </button>
@@ -82,8 +77,6 @@ function PendingAccessRequests({ requests, onApprove, onReject }) {
   );
 }
 
-// NOTE: gate this page/route behind a "current admin is main_admin" check
-// once real auth roles are wired up — creation should be Main Admin only.
 export default function AdminManagement() {
   const [search, setSearch] = useState('');
   const [role, setRole] = useState('all');
@@ -97,13 +90,21 @@ export default function AdminManagement() {
   const { data, loading, refetch } = useApi(() => adminService.getAdmins(), []);
   const allAdmins = data?.items || [];
 
-  const { requests, refresh: refreshRequests } = useAccessRequests();
+  const pendingRequests = useMemo(
+    () =>
+      allAdmins
+        .filter((a) => a.status === 'pending')
+        .map((a) => ({ id: a.id, fullName: a.name, email: a.email, createdAt: a.createdAt })),
+    [allAdmins]
+  );
+
+  const rosterAdmins = useMemo(() => allAdmins.filter((a) => a.status !== 'pending'), [allAdmins]);
 
   const filteredAdmins = useMemo(() => {
-    let result = searchFilter(allAdmins, search, ['name', 'username', 'email']);
+    let result = searchFilter(rosterAdmins, search, ['name', 'username', 'email']);
     if (role !== 'all') result = result.filter((a) => a.role === role);
     return result;
-  }, [allAdmins, search, role]);
+  }, [rosterAdmins, search, role]);
 
   const { paginatedItems, currentPage, totalPages, totalItems, pageSize, goToPage } =
     usePagination(filteredAdmins);
@@ -155,16 +156,24 @@ export default function AdminManagement() {
     }
   }
 
-  function handleApproveRequest(id) {
-    approveAccessRequest(id);
-    refreshRequests();
-    addToast('Request marked as approved', 'success');
+  async function handleApproveRequest(id) {
+    try {
+      await adminService.approvePendingAdmin(id);
+      addToast('Administrator approved', 'success');
+      refetch();
+    } catch (err) {
+      addToast(err.message || 'Failed to approve administrator', 'error');
+    }
   }
 
-  function handleRejectRequest(id) {
-    rejectAccessRequest(id);
-    refreshRequests();
-    addToast('Request rejected', 'success');
+  async function handleRejectRequest(id) {
+    try {
+      await adminService.rejectPendingAdmin(id);
+      addToast('Administrator request rejected', 'success');
+      refetch();
+    } catch (err) {
+      addToast(err.message || 'Failed to reject administrator', 'error');
+    }
   }
 
   return (
@@ -183,7 +192,7 @@ export default function AdminManagement() {
       </div>
 
       <PendingAccessRequests
-        requests={requests}
+        requests={pendingRequests}
         onApprove={handleApproveRequest}
         onReject={handleRejectRequest}
       />
