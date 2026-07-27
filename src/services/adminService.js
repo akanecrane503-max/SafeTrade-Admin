@@ -1,102 +1,140 @@
-const ADMINS_KEY = 'admin_accounts';
-const ACTIVITY_KEY = 'admin_activity_log';
+import { supabase } from '../lib/supabase';
 
-function delay(ms = 300) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function deriveUsername(email) {
+  return email ? email.split('@')[0] : '—';
 }
 
-function readList(key, seed) {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw) return JSON.parse(raw);
-  } catch {
-    // fall through to reseed below
-  }
-  localStorage.setItem(key, JSON.stringify(seed));
-  return seed;
-}
-
-function writeList(key, list) {
-  localStorage.setItem(key, JSON.stringify(list));
-}
-
-const SEED_ADMINS = [
-  {
-    id: 'admin_main',
-    name: 'Main Admin',
-    username: 'mainadmin',
-    email: 'ascendextradefunction@gmail.com',
-    role: 'main_admin',
-    status: 'active',
-    createdAt: new Date().toISOString(),
-  },
-];
-
-const SEED_ACTIVITY = [
-  {
-    id: 'log_seed',
-    adminName: 'Main Admin',
-    action: 'Signed in',
-    target: '—',
-    createdAt: new Date().toISOString(),
-  },
-];
-
-function logActivity(action, target) {
-  const items = readList(ACTIVITY_KEY, SEED_ACTIVITY);
-  const record = {
-    id: `log_${Date.now()}`,
-    adminName: 'Main Admin',
+async function logAdminActivity(action, target) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) return;
+  await supabase.from('admin_activity_log').insert({
+    admin_id: session.user.id,
     action,
     target: target || '—',
-    createdAt: new Date().toISOString(),
-  };
-  writeList(ACTIVITY_KEY, [record, ...items]);
+  });
 }
 
 export async function getAdmins() {
-  await delay();
-  const items = readList(ADMINS_KEY, SEED_ADMINS);
+  const { data, error } = await supabase
+    .from('admins')
+    .select('id, email, full_name, role, status, created_at, last_login')
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+
+  const items = (data || []).map((a) => ({
+    id: a.id,
+    name: a.full_name,
+    username: deriveUsername(a.email), // derived for display — admins table has no username column
+    email: a.email,
+    role: a.role,
+    status: a.status,
+    lastLoginAt: a.last_login,
+    createdAt: a.created_at,
+  }));
   return { items, total: items.length };
 }
 
-export async function createAdmin(payload) {
-  await delay();
-  const items = readList(ADMINS_KEY, SEED_ADMINS);
-  const record = {
-    id: `admin_${Date.now()}`,
-    status: 'active',
-    createdAt: new Date().toISOString(),
-    ...payload,
-  };
-  writeList(ADMINS_KEY, [record, ...items]);
-  logActivity('Created administrator', record.name || record.email);
-  return record;
+export async function registerPendingAdmin({ fullName, email, password }) {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { full_name: fullName } },
+  });
+  if (error) throw error;
+  if (!data.user) throw new Error('Registration failed. Please try again.');
+
+  const { error: insertError } = await supabase.from('admins').insert({
+    id: data.user.id,
+    email,
+    full_name: fullName,
+    role: 'support_admin',
+    status: 'pending',
+  });
+  if (insertError) throw new Error(insertError.message);
+
+  await supabase.auth.signOut();
+}
+
+export async function createAdmin() {
+  throw new Error(
+    "Direct admin creation isn't available yet — ask the new admin to register at the Request Access page, then approve them here."
+  );
 }
 
 export async function updateAdmin(id, payload) {
-  await delay();
-  const items = readList(ADMINS_KEY, SEED_ADMINS);
-  const updated = items.map((a) => (a.id === id ? { ...a, ...payload } : a));
-  writeList(ADMINS_KEY, updated);
-  logActivity('Updated administrator', payload.name || id);
-  return updated.find((a) => a.id === id);
+  if (payload.password) {
+    throw new Error("Password changes aren't supported yet — leave the password field blank.");
+  }
+  const updates = {};
+  if (payload.name !== undefined) updates.full_name = payload.name;
+  if (payload.role !== undefined) updates.role = payload.role;
+
+  const { data, error } = await supabase
+    .from('admins')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+
+  await logAdminActivity('Updated administrator', data.full_name || data.email);
+  return data;
 }
 
 export async function toggleAdminStatus(id, activate) {
-  await delay();
-  const items = readList(ADMINS_KEY, SEED_ADMINS);
-  const updated = items.map((a) =>
-    a.id === id ? { ...a, status: activate ? 'active' : 'suspended' } : a
+  const { data, error } = await supabase
+    .from('admins')
+    .update({ status: activate ? 'active' : 'suspended' })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+
+  await logAdminActivity(
+    activate ? 'Activated administrator' : 'Suspended administrator',
+    data.full_name || data.email
   );
-  writeList(ADMINS_KEY, updated);
-  const target = updated.find((a) => a.id === id);
-  logActivity(activate ? 'Activated administrator' : 'Suspended administrator', target?.name || id);
-  return target;
+  return data;
+}
+
+export async function approvePendingAdmin(id) {
+  const { data, error } = await supabase
+    .from('admins')
+    .update({ status: 'active' })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  await logAdminActivity('Approved administrator', data.full_name || data.email);
+  return data;
+}
+
+export async function rejectPendingAdmin(id) {
+  const { data, error } = await supabase
+    .from('admins')
+    .update({ status: 'rejected' })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  await logAdminActivity('Rejected administrator', data.full_name || data.email);
+  return data;
 }
 
 export async function getActivityLog({ limit = 20 } = {}) {
-  await delay();
-  const items = readList(ACTIVITY_KEY, SEED_ACTIVITY);
-  return { items: items.slice(0, limit), total: items.length };
+  const { data, error } = await supabase
+    .from('admin_activity_log')
+    .select('id, admin_id, action, target, created_at, admins:admin_id (full_name, email)')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+
+  const items = (data || []).map((row) => ({
+    id: row.id,
+    adminName: row.admins?.full_name || row.admins?.email || 'Unknown',
+    action: row.action,
+    target: row.target,
+    createdAt: row.created_at,
+  }));
+  return { items, total: items.length };
 }
