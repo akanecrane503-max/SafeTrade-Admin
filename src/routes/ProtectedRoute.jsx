@@ -1,13 +1,21 @@
-import { Navigate, Outlet } from 'react-router-dom';
-import { AUTH_TOKEN_KEY, ROUTES } from '../utils/constants';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { useAdminAuth } from '../context/AdminAuthContext.jsx';
+import { ROUTES } from '../utils/constants';
 
-// Wraps protected route groups. Redirects to /login when no token is present.
-// Swap the token check for a real auth hook (useAuth) once auth.js is wired up.
 export default function ProtectedRoute() {
-  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  const { adminUser, sessionLoading } = useAdminAuth();
+  const location = useLocation();
 
-  if (!token) {
-    return <Navigate to={ROUTES.LOGIN} replace />;
+  if (sessionLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <div className="w-8 h-8 border-2 border-slate-700 border-t-blue-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!adminUser) {
+    return <Navigate to={ROUTES.LOGIN} state={{ from: location }} replace />;
   }
 
   return <Outlet />;
