@@ -21,13 +21,74 @@ export async function getUsers(params = {}) {
   return { items };
 }
 export async function getUserById(id) {
-  const { data } = await api.get(`/users/${id}`);
-  return data;
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  return {
+    id: data.id,
+    uid: data.uid,
+    name: data.full_name,
+    email: data.email,
+    role: data.role,
+    status: data.status,
+    country: data.country,
+    portfolio_usd: data.portfolio_usd,
+    btc: data.btc,
+    eth: data.eth,
+    bnb: data.bnb,
+    sol: data.sol,
+    xrp: data.xrp,
+    usdt: data.usdt,
+    createdAt: data.created_at,
+    lastLogin: data.last_login,
+    isOnline: data.is_online,
+  };
 }
 // Full detail payload: profile, security, assets, trading, wallets, kyc, binding, notes
 export async function getUserDetail(id) {
-  const { data } = await api.get(`/users/${id}/detail`);
-  return data;
+  const profile = await getUserById(id);
+
+  return {
+    ...profile,
+
+    assets: [
+      {
+        coin: "BTC",
+        balance: profile.btc,
+        usdValue: 0,
+      },
+      {
+        coin: "ETH",
+        balance: profile.eth,
+        usdValue: 0,
+      },
+      {
+        coin: "BNB",
+        balance: profile.bnb,
+        usdValue: 0,
+      },
+      {
+        coin: "SOL",
+        balance: profile.sol,
+        usdValue: 0,
+      },
+      {
+        coin: "XRP",
+        balance: profile.xrp,
+        usdValue: 0,
+      },
+      {
+        coin: "USDT",
+        balance: profile.usdt,
+        usdValue: profile.usdt,
+      },
+    ],
+  };
 }
 export async function updateUser(id, payload) {
   const { data } = await api.put(`/users/${id}`, payload);
