@@ -1,93 +1,185 @@
-import { useState } from 'react';
-import { Pencil } from 'lucide-react';
-import Modal from '../../common/Modal.jsx';
-import { useToast } from '../../common/Toast.jsx';
-import * as userService from '../../../services/userService';
-import { truncateAddress } from '../../../utils/formatters';
-import { NETWORKS } from '../../../utils/constants';
+import { useState } from "react";
+import { Pencil } from "lucide-react";
+import Modal from "../../common/Modal.jsx";
+import { useToast } from "../../common/Toast.jsx";
+import * as userService from "../../../services/userService";
+import { truncateAddress } from "../../../utils/formatters";
+
+const NETWORKS = [
+  {
+    coin: "BTC",
+    network: "bitcoin",
+    label: "Bitcoin",
+  },
+  {
+    coin: "ETH",
+    network: "erc20",
+    label: "Ethereum (ERC20)",
+  },
+  {
+    coin: "USDT",
+    network: "trc20",
+    label: "USDT (TRC20)",
+  },
+  {
+    coin: "USDT",
+    network: "bep20",
+    label: "USDT (BEP20)",
+  },
+  {
+    coin: "USDT",
+    network: "erc20-usdt",
+    label: "USDT (ERC20)",
+  },
+  {
+    coin: "SOL",
+    network: "solana",
+    label: "Solana",
+  },
+  {
+    coin: "XRP",
+    network: "xrpl",
+    label: "Ripple (XRP)",
+  },
+  {
+    coin: "DOGE",
+    network: "dogecoin",
+    label: "Dogecoin",
+  },
+  {
+    coin: "ADA",
+    network: "cardano",
+    label: "Cardano",
+  },
+  {
+    coin: "TRX",
+    network: "tron",
+    label: "TRON",
+  },
+];
 
 export default function WalletsTab({ user, onRefetch }) {
-  const [editingNetwork, setEditingNetwork] = useState(null);
-  const [address, setAddress] = useState('');
-  const [saving, setSaving] = useState(false);
   const { addToast } = useToast();
+  const [editingWallet, setEditingWallet] = useState(null);
+  const [address, setAddress] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const wallets = user.wallets || {};
-
-  function openEdit(networkValue) {
-    setEditingNetwork(networkValue);
-    setAddress(wallets[networkValue] || '');
+  function openEdit(wallet) {
+    setEditingWallet(wallet);
+    setAddress(user.wallets?.[wallet.network] || "");
   }
 
   async function handleSave(e) {
     e.preventDefault();
+    if (!editingWallet) return;
     setSaving(true);
     try {
-      await userService.updateUserWalletAddress(user.id, editingNetwork, address);
-      addToast('Wallet address updated', 'success');
-      setEditingNetwork(null);
+      await userService.updateUserWalletAddress(
+        user.id,
+        editingWallet.network,
+        address
+      );
+      addToast(`${editingWallet.label} updated`, "success");
+      setEditingWallet(null);
       onRefetch?.();
     } catch (err) {
-      addToast(err.message || 'Failed to update wallet address', 'error');
+      addToast(err.message || "Unable to save wallet", "error");
     } finally {
       setSaving(false);
     }
   }
 
-  const editingLabel = NETWORKS.find((n) => n.value === editingNetwork)?.label;
-
   return (
     <div className="card p-5">
-      <h3 className="text-sm font-semibold text-slate-200 mb-5">Wallet Addresses</h3>
+      <h3 className="mb-5 text-sm font-semibold text-slate-200">
+        User Deposit Wallets
+      </h3>
 
-      <div className="space-y-2">
-        {NETWORKS.map((network) => (
-          <div
-            key={network.value}
-            className="flex items-center justify-between p-3 rounded-xl bg-slate-800/40"
-          >
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-slate-200">{network.label}</p>
-              <p className="text-xs font-mono text-slate-500 truncate">
-                {truncateAddress(wallets[network.value]) || 'Not set'}
-              </p>
-            </div>
-            <button
-              onClick={() => openEdit(network.value)}
-              className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-800 hover:text-slate-200 transition-colors shrink-0"
+      <div className="space-y-3">
+        {NETWORKS.map((wallet) => {
+          const value = user.wallets?.[wallet.network] || "";
+          return (
+            <div
+              key={wallet.network}
+              className="flex items-center justify-between rounded-xl bg-slate-800/40 p-3"
             >
-              <Pencil className="w-4 h-4" />
-            </button>
-          </div>
-        ))}
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-slate-200">
+                  {wallet.label}
+                </p>
+                <p className="truncate font-mono text-xs text-slate-500">
+                  {value ? truncateAddress(value) : "Not assigned"}
+                </p>
+              </div>
+              <button
+                onClick={() => openEdit(wallet)}
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-700 hover:text-white"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            </div>
+          );
+        })}
       </div>
 
       <Modal
-        open={Boolean(editingNetwork)}
-        onClose={() => setEditingNetwork(null)}
-        title={`Edit ${editingLabel} Address`}
+        open={Boolean(editingWallet)}
+        onClose={() => setEditingWallet(null)}
+        title={editingWallet ? `Edit ${editingWallet.label}` : "Edit Wallet"}
         footer={
           <>
-            <button onClick={() => setEditingNetwork(null)} className="btn-secondary" disabled={saving}>
+            <button
+              onClick={() => setEditingWallet(null)}
+              className="btn-secondary"
+              disabled={saving}
+            >
               Cancel
             </button>
-            <button onClick={handleSave} className="btn-primary" disabled={saving}>
-              {saving ? 'Saving...' : 'Save'}
+            <button
+              onClick={handleSave}
+              className="btn-primary"
+              disabled={saving}
+            >
+              {saving ? "Saving..." : "Save"}
             </button>
           </>
         }
       >
-        <form onSubmit={handleSave}>
-          <label className="block text-sm font-medium text-slate-300 mb-1.5">
-            {editingLabel} Wallet Address
-          </label>
-          <input
-            type="text"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            className="input-base w-full font-mono text-sm"
-            autoFocus
-          />
+        <form onSubmit={handleSave} className="space-y-4">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-300">
+              Wallet Address
+            </label>
+            <input
+              type="text"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              className="input-base w-full font-mono text-sm"
+              placeholder="Enter wallet address"
+              autoFocus
+            />
+          </div>
+
+          {editingWallet?.coin === "XRP" && (
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Destination Tag / Memo
+              </label>
+              <div className="rounded-lg border border-dashed border-slate-700 bg-slate-900/40 p-3 text-xs text-slate-400">
+                XRP Memo support will be connected in the next upgrade.
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
+            <p className="text-xs leading-6 text-slate-400">
+              This wallet belongs only to{" "}
+              <span className="font-semibold text-white">{user.name}</span>.
+              <br />
+              After saving, SafeTradeX will automatically display this
+              address on this user's Deposit page.
+            </p>
+          </div>
         </form>
       </Modal>
     </div>
