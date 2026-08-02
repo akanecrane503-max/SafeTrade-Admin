@@ -25,7 +25,8 @@ export async function getUsers() {
         "BNB",
         "SOL",
         "XRP",
-        "USDT"
+        "USDT",
+        "USDC"
       `
     )
     .order("uid", { ascending: true });
@@ -54,6 +55,7 @@ export async function getUsers() {
       sol: Number(row.SOL || 0),
       xrp: Number(row.XRP || 0),
       usdt: Number(row.USDT || 0),
+      usdc: Number(row.USDC || 0), // Added USDC
     })),
   };
 }
@@ -90,6 +92,7 @@ export async function getUserById(id) {
     sol: Number(data.SOL || 0),
     xrp: Number(data.XRP || 0),
     usdt: Number(data.USDT || 0),
+    usdc: Number(data.USDC || 0), // Added USDC
 
     createdAt: data.created_at,
     lastLogin: data.last_login,
@@ -129,6 +132,7 @@ export async function getUserDetail(id) {
       { coin: "SOL", balance: profile.sol, usdValue: 0 },
       { coin: "XRP", balance: profile.xrp, usdValue: 0 },
       { coin: "USDT", balance: profile.usdt, usdValue: profile.usdt },
+      { coin: "USDC", balance: profile.usdc, usdValue: profile.usdc }, // Added USDC
     ],
 
     wallets,
@@ -144,9 +148,6 @@ export async function updateUser(id, payload) {
   return data;
 }
 
-/* ============================================================
-   ADMIN TRADE MODE TOGGLE
-============================================================ */
 export async function updateUserTradeMode(userId, newMode) {
   if (!['neutral', 'win', 'lose'].includes(newMode)) {
     throw new Error("Invalid trade mode. Must be 'neutral', 'win', or 'lose'.");
@@ -209,7 +210,7 @@ export async function activateUserAccount(id) {
 }
 
 /* ============================================================
-   ASSETS - THE FIX IS RIGHT HERE
+   ASSETS
 ============================================================ */
 
 export async function updateUserAsset(
