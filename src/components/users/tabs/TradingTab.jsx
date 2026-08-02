@@ -5,6 +5,7 @@ import ConfirmDialog from '../../common/ConfirmDialog.jsx';
 import { useToast } from '../../common/Toast.jsx';
 import * as tradingService from '../../../services/tradingService';
 import * as tradeService from '../../../services/tradeService'; 
+import { formatDateTime } from '../../../utils/formatters';
 import { cn } from '../../../utils/helpers';
 import Dropdown from '../../common/Dropdown.jsx';
 
@@ -25,6 +26,9 @@ export default function TradingTab({ user, onRefetch }) {
   const [openTrades, setOpenTrades] = useState([]);
   const [tradesLoading, setTradesLoading] = useState(true);
   const [enabled, setEnabled] = useState(Boolean(user?.tradingEnabled));
+
+  const [tradeHistory, setTradeHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
   
   const [settlingTrade, setSettlingTrade] = useState(null);
   const [settlingOutcome, setSettlingOutcome] = useState(null);
@@ -65,6 +69,23 @@ export default function TradingTab({ user, onRefetch }) {
     }
     loadUserData();
   }, [user?.id, user?.email]);
+
+  // 1b. FETCH COMPLETED TRADE HISTORY
+  useEffect(() => {
+    async function loadTradeHistory() {
+      if (!user?.id) return;
+      setHistoryLoading(true);
+      try {
+        const trades = await tradeService.getUserTrades(user.id);
+        setTradeHistory((trades || []).filter((t) => t.status !== 'open'));
+      } catch (err) {
+        console.error("Failed to load trade history", err);
+      } finally {
+        setHistoryLoading(false);
+      }
+    }
+    loadTradeHistory();
+  }, [user?.id]);
 
   // 2. HANDLE AUTO WIN / LOSE MODE CHANGE
   async function handleModeChange(newMode) {
@@ -216,6 +237,58 @@ export default function TradingTab({ user, onRefetch }) {
                 </div>
               );
             })}
+          </div>
+        )}
+      </div>
+
+      <div className="card p-5">
+        <h3 className="text-sm font-semibold text-slate-200 mb-5">
+          Trade History <span className="text-xs font-normal text-slate-500 ml-2">({tradeHistory.length})</span>
+        </h3>
+        {historyLoading ? (
+          <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 text-blue-400 animate-spin" /></div>
+        ) : tradeHistory.length === 0 ? (
+          <div className="text-center py-8 text-slate-500 text-sm bg-slate-800/20 rounded-xl border border-slate-700/50">This user has no completed trades yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-800 text-left">
+                  <th className="px-3 py-2 font-medium text-slate-500">Coin</th>
+                  <th className="px-3 py-2 font-medium text-slate-500">Direction</th>
+                  <th className="px-3 py-2 font-medium text-slate-500">Amount</th>
+                  <th className="px-3 py-2 font-medium text-slate-500">Result</th>
+                  <th className="px-3 py-2 font-medium text-slate-500">Profit</th>
+                  <th className="px-3 py-2 font-medium text-slate-500">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {tradeHistory.map((trade) => {
+                  const isWin = trade.result === 'win';
+                  return (
+                    <tr key={trade.id}>
+                      <td className="px-3 py-2.5 font-medium text-slate-200">{trade.coin}</td>
+                      <td className="px-3 py-2.5">
+                        <span className={cn('inline-flex items-center gap-1 text-xs font-medium', trade.direction === 'long' ? 'text-emerald-400' : 'text-red-400')}>
+                          {trade.direction === 'long' ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                          {trade.direction === 'long' ? 'Long' : 'Short'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-300">${Number(trade.amount).toLocaleString()}</td>
+                      <td className="px-3 py-2.5">
+                        <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', isWin ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400')}>
+                          {isWin ? 'Win' : 'Lose'}
+                        </span>
+                      </td>
+                      <td className={cn('px-3 py-2.5 font-medium', isWin ? 'text-emerald-400' : 'text-red-400')}>
+                        {isWin ? '+' : ''}${Number(trade.profit).toLocaleString()}
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-500">{formatDateTime(trade.created_at)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
