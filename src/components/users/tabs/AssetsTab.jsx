@@ -36,7 +36,8 @@ export default function AssetsTab({ user, onRefetch }) {
       if (freshUserData) {
         const realAssets = SUPPORTED_ASSETS.map((coin) => {
           // Read balance directly from the freshly fetched user object
-          const balance = Number(freshUserData[coin] || 0);
+          // (userService returns lowercase keys: btc, eth, sol, xrp, bnb, usdt, usdc)
+          const balance = Number(freshUserData[coin.toLowerCase()] || 0);
           const price = MARKET_PRICES[coin] || 0;
           return {
             coin: coin,
