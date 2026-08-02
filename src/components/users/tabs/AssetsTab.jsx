@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Pencil, Coins } from 'lucide-react';
+import { Pencil, Coins, RefreshCw } from 'lucide-react';
 import Modal from '../../common/Modal.jsx';
 import EmptyState from '../../common/EmptyState.jsx';
 import { useToast } from '../../common/Toast.jsx';
@@ -16,7 +16,7 @@ export default function AssetsTab({ user, onRefetch }) {
   const [loading, setLoading] = useState(true);
   const { addToast } = useToast();
 
-  // Hardcoded current market prices (You can replace this with an API call later)
+  // Fixed Market Prices for Admin View
   const MARKET_PRICES = {
     BTC: 63437,
     ETH: 1882.47,
@@ -27,30 +27,34 @@ export default function AssetsTab({ user, onRefetch }) {
     USDC: 1.00,
   };
 
-  useEffect(() => {
-    async function fetchRealBalances() {
-      if (!user?.id) return;
-      setLoading(true);
-      try {
-        const freshUserData = await userService.getUserById(user.id);
-        if (freshUserData) {
-          const realAssets = SUPPORTED_ASSETS.map((coin) => {
-            const balance = Number(freshUserData[coin] || 0);
-            const price = MARKET_PRICES[coin] || 0; // Fetch price from map
-            return {
-              coin: coin,
-              balance: balance,
-              usdValue: balance * price, // CALCULATE USD VALUE HERE
-            };
-          });
-          setAssets(realAssets);
-        }
-      } catch (err) {
-        console.error("Failed to fetch assets:", err);
-      } finally {
-        setLoading(false);
+  // Function to fetch data manually
+  async function fetchRealBalances() {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const freshUserData = await userService.getUserById(user.id);
+      if (freshUserData) {
+        const realAssets = SUPPORTED_ASSETS.map((coin) => {
+          // Read balance directly from the freshly fetched user object
+          const balance = Number(freshUserData[coin] || 0);
+          const price = MARKET_PRICES[coin] || 0;
+          return {
+            coin: coin,
+            balance: balance,
+            usdValue: balance * price,
+          };
+        });
+        setAssets(realAssets);
       }
+    } catch (err) {
+      console.error("Failed to fetch assets:", err);
+    } finally {
+      setLoading(false);
     }
+  }
+
+  // Run on page load
+  useEffect(() => {
     fetchRealBalances();
   }, [user?.id]);
 
@@ -63,10 +67,18 @@ export default function AssetsTab({ user, onRefetch }) {
     e.preventDefault();
     setSaving(true);
     try {
+      // 1. Save to Supabase
       await userService.updateUserAsset(user.id, editingAsset.coin, Number(value));
       addToast(`${editingAsset.coin} balance updated`, 'success');
       setEditingAsset(null);
-      if (onRefetch) await onRefetch();
+      
+      // 2. IMMEDIATELY re-fetch the data to update the screen
+      await fetchRealBalances();
+
+      // 3. Also tell the parent page to update (just in case)
+      if (onRefetch) {
+        await onRefetch();
+      }
     } catch (err) {
       addToast(err.message || 'Failed to update balance', 'error');
     } finally {
@@ -77,7 +89,9 @@ export default function AssetsTab({ user, onRefetch }) {
   if (loading) {
     return (
       <div className="card p-5">
-        <h3 className="text-sm font-semibold text-slate-200 mb-5">Assets</h3>
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-sm font-semibold text-slate-200">Assets</h3>
+        </div>
         <div className="space-y-2">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <div key={i} className="h-10 bg-slate-800/40 rounded-lg animate-pulse" />
@@ -89,7 +103,16 @@ export default function AssetsTab({ user, onRefetch }) {
 
   return (
     <div className="card p-5">
-      <h3 className="text-sm font-semibold text-slate-200 mb-5">Assets</h3>
+      <div className="flex items-center justify-between mb-5">
+        <h3 className="text-sm font-semibold text-slate-200">Assets</h3>
+        <button 
+          onClick={fetchRealBalances} 
+          className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+          title="Refresh Assets"
+        >
+          <RefreshCw className="w-4 h-4" />
+        </button>
+      </div>
 
       {!assets.length ? (
         <EmptyState icon={Coins} title="No assets" description="This user holds no balances yet." />
