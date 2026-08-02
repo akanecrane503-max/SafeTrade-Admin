@@ -29,7 +29,11 @@ export default function AssetsTab({ user, onRefetch }) {
       await userService.updateUserAsset(user.id, editingAsset.coin, Number(value));
       addToast(`${editingAsset.coin} balance updated`, 'success');
       setEditingAsset(null);
-      onRefetch?.();
+      
+      // FORCE REFETCH
+      if (onRefetch) {
+        await onRefetch();
+      }
     } catch (err) {
       addToast(err.message || 'Failed to update balance', 'error');
     } finally {
