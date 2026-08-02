@@ -25,7 +25,8 @@ export async function getUsers() {
         sol,
         xrp,
         usdt,
-        usdc
+        usdc,
+        trade_mode
       `
     )
     .order("uid", { ascending: true });
@@ -54,6 +55,8 @@ export async function getUsers() {
       xrp: Number(row.xrp || 0),
       usdt: Number(row.usdt || 0),
       usdc: Number(row.usdc || 0),
+
+      tradeMode: row.trade_mode || "neutral",
     })),
   };
 }
@@ -90,6 +93,8 @@ export async function getUserById(id) {
     xrp: Number(data.xrp || 0),
     usdt: Number(data.usdt || 0),
     usdc: Number(data.usdc || 0),
+
+    tradeMode: data.trade_mode || "neutral",
 
     createdAt: data.created_at,
     lastLogin: data.last_login,
@@ -210,6 +215,31 @@ export async function freezeUserAccount(id) {
 export async function activateUserAccount(id) {
   const { data } = await api.post(`/users/${id}/reactivate`);
   return data;
+}
+
+/* ============================================================
+   TRADE MODE (per-user Auto-Win / Auto-Lose override)
+============================================================ */
+
+export async function updateUserTradeMode(userId, mode) {
+  const allowedModes = ["neutral", "win", "lose"];
+
+  if (!allowedModes.includes(mode)) {
+    throw new Error(`Unsupported trade mode: ${mode}`);
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ trade_mode: mode })
+    .eq("id", userId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    success: true,
+  };
 }
 
 /* ============================================================
