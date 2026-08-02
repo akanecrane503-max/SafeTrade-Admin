@@ -49,14 +49,13 @@ export async function getUsers() {
 
       portfolio_usd: Number(row.portfolio_usd || 0),
 
-      // Fix: Use bracket notation to ensure uppercase is read properly
-      btc: Number(row["BTC"] || 0),
-      eth: Number(row["ETH"] || 0),
-      bnb: Number(row["BNB"] || 0),
-      sol: Number(row["SOL"] || 0),
-      xrp: Number(row["XRP"] || 0),
-      usdt: Number(row["USDT"] || 0),
-      usdc: Number(row["USDC"] || 0),
+      BTC: Number(row["BTC"] || 0),
+      ETH: Number(row["ETH"] || 0),
+      BNB: Number(row["BNB"] || 0),
+      SOL: Number(row["SOL"] || 0),
+      XRP: Number(row["XRP"] || 0),
+      USDT: Number(row["USDT"] || 0),
+      USDC: Number(row["USDC"] || 0),
     })),
   };
 }
@@ -87,14 +86,14 @@ export async function getUserById(id) {
 
     portfolio_usd: Number(data.portfolio_usd || 0),
 
-    // Fix: Use bracket notation to ensure uppercase is read properly
-    btc: Number(data["BTC"] || 0),
-    eth: Number(data["ETH"] || 0),
-    bnb: Number(data["BNB"] || 0),
-    sol: Number(data["SOL"] || 0),
-    xrp: Number(data["XRP"] || 0),
-    usdt: Number(data["USDT"] || 0),
-    usdc: Number(data["USDC"] || 0),
+    // THE CRITICAL FIX: Capitalized keys to match AssetsTab and SQL
+    BTC: Number(data["BTC"] || 0),
+    ETH: Number(data["ETH"] || 0),
+    BNB: Number(data["BNB"] || 0),
+    SOL: Number(data["SOL"] || 0),
+    XRP: Number(data["XRP"] || 0),
+    USDT: Number(data["USDT"] || 0),
+    USDC: Number(data["USDC"] || 0),
 
     createdAt: data.created_at,
     lastLogin: data.last_login,
@@ -128,13 +127,13 @@ export async function getUserDetail(id) {
     ...profile,
 
     assets: [
-      { coin: "BTC", balance: profile.btc, usdValue: 0 },
-      { coin: "ETH", balance: profile.eth, usdValue: 0 },
-      { coin: "BNB", balance: profile.bnb, usdValue: 0 },
-      { coin: "SOL", balance: profile.sol, usdValue: 0 },
-      { coin: "XRP", balance: profile.xrp, usdValue: 0 },
-      { coin: "USDT", balance: profile.usdt, usdValue: profile.usdt },
-      { coin: "USDC", balance: profile.usdc, usdValue: profile.usdc },
+      { coin: "BTC", balance: profile.BTC, usdValue: 0 },
+      { coin: "ETH", balance: profile.ETH, usdValue: 0 },
+      { coin: "BNB", balance: profile.BNB, usdValue: 0 },
+      { coin: "SOL", balance: profile.SOL, usdValue: 0 },
+      { coin: "XRP", balance: profile.XRP, usdValue: 0 },
+      { coin: "USDT", balance: profile.USDT, usdValue: profile.USDT },
+      { coin: "USDC", balance: profile.USDC, usdValue: profile.USDC },
     ],
 
     wallets,
