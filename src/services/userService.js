@@ -20,12 +20,12 @@ export async function getUsers() {
         trade_mode,
         created_at,
         portfolio_usd,
-        btc,
-        eth,
-        bnb,
-        sol,
-        xrp,
-        usdt
+        "BTC",
+        "ETH",
+        "BNB",
+        "SOL",
+        "XRP",
+        "USDT"
       `
     )
     .order("uid", { ascending: true });
@@ -43,17 +43,17 @@ export async function getUsers() {
       country: row.country,
       role: row.role,
       status: row.status,
-      tradeMode: row.trade_mode || 'neutral', // Mapping database column to frontend prop
+      tradeMode: row.trade_mode || 'neutral',
       createdAt: row.created_at,
 
       portfolio_usd: Number(row.portfolio_usd || 0),
 
-      btc: Number(row.btc || 0),
-      eth: Number(row.eth || 0),
-      bnb: Number(row.bnb || 0),
-      sol: Number(row.sol || 0),
-      xrp: Number(row.xrp || 0),
-      usdt: Number(row.usdt || 0),
+      btc: Number(row.BTC || 0),
+      eth: Number(row.ETH || 0),
+      bnb: Number(row.BNB || 0),
+      sol: Number(row.SOL || 0),
+      xrp: Number(row.XRP || 0),
+      usdt: Number(row.USDT || 0),
     })),
   };
 }
@@ -78,18 +78,18 @@ export async function getUserById(id) {
 
     role: data.role,
     status: data.status,
-    tradeMode: data.trade_mode || 'neutral', // Mapping database column to frontend prop
+    tradeMode: data.trade_mode || 'neutral',
 
     country: data.country,
 
     portfolio_usd: Number(data.portfolio_usd || 0),
 
-    btc: Number(data.btc || 0),
-    eth: Number(data.eth || 0),
-    bnb: Number(data.bnb || 0),
-    sol: Number(data.sol || 0),
-    xrp: Number(data.xrp || 0),
-    usdt: Number(data.usdt || 0),
+    btc: Number(data.BTC || 0),
+    eth: Number(data.ETH || 0),
+    bnb: Number(data.BNB || 0),
+    sol: Number(data.SOL || 0),
+    xrp: Number(data.XRP || 0),
+    usdt: Number(data.USDT || 0),
 
     createdAt: data.created_at,
     lastLogin: data.last_login,
@@ -140,13 +140,12 @@ export async function getUserDetail(id) {
 ============================================================ */
 
 export async function updateUser(id, payload) {
-  // Support updating trade_mode via this standard function as well
   const { data } = await api.put(`/users/${id}`, payload);
   return data;
 }
 
 /* ============================================================
-   ⚡ NEW: ADMIN TRADE MODE TOGGLE (WIN / LOSE / NEUTRAL)
+   ADMIN TRADE MODE TOGGLE
 ============================================================ */
 export async function updateUserTradeMode(userId, newMode) {
   if (!['neutral', 'win', 'lose'].includes(newMode)) {
@@ -210,7 +209,7 @@ export async function activateUserAccount(id) {
 }
 
 /* ============================================================
-   ASSETS
+   ASSETS - THE FIX IS RIGHT HERE
 ============================================================ */
 
 export async function updateUserAsset(
@@ -220,7 +219,8 @@ export async function updateUserAsset(
   type = "adjustment",
   description = ""
 ) {
-  const column = coin.toLowerCase();
+  // Force the column name to be Uppercase to match Supabase schema
+  const column = coin.toUpperCase();
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
