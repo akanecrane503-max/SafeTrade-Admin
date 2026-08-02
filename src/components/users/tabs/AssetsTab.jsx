@@ -3,7 +3,6 @@ import { Pencil, Coins } from 'lucide-react';
 import Modal from '../../common/Modal.jsx';
 import EmptyState from '../../common/EmptyState.jsx';
 import { useToast } from '../../common/Toast.jsx';
-import { supabase } from '../../../lib/supabase'; // Import Supabase directly
 import * as userService from '../../../services/userService';
 import { formatCrypto, formatCurrency } from '../../../utils/formatters';
 
@@ -18,39 +17,35 @@ export default function AssetsTab({ user, onRefetch }) {
   const [loading, setLoading] = useState(true);
   const { addToast } = useToast();
 
-  // --- FETCH REAL BALANCES FROM SUPABASE DIRECTLY ---
+  // --- FETCH REAL BALANCES USING THE EXISTING USER SERVICE ---
   useEffect(() => {
     async function fetchRealBalances() {
       if (!user?.id) return;
       setLoading(true);
       
       try {
-        // Query the profiles table for all coin balances
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('btc, eth, sol, xrp, bnb, usdt, usdc')
-          .eq('id', user.id)
-          .single();
+        // Use your EXISTING userService to fetch the user again. 
+        // This avoids Supabase RLS permission errors.
+        const freshUserData = await userService.getUserById(user.id);
 
-        if (error) throw error;
-
-        if (data) {
-          // Map the database columns (lowercase) to the UI list (uppercase)
+        if (freshUserData) {
+          // Map the data to match your UI
           const realAssets = SUPPORTED_ASSETS.map((coin) => {
+            // Grab the balance from the fresh user data (lowercase column names)
             const columnName = coin.toLowerCase();
-            const balance = Number(data[columnName] || 0);
+            const balance = Number(freshUserData[columnName] || 0);
             
             return {
               coin: coin,
               balance: balance,
-              usdValue: 0, // You can calculate this later if you have live prices
+              usdValue: 0, // Placeholder for USD value
             };
           });
           setAssets(realAssets);
         }
       } catch (err) {
         console.error("Failed to fetch assets:", err);
-        addToast("Could not load user assets", 'error');
+        addToast("Could not load user assets. Please refresh the page.", 'error');
       } finally {
         setLoading(false);
       }
@@ -72,7 +67,7 @@ export default function AssetsTab({ user, onRefetch }) {
       addToast(`${editingAsset.coin} balance updated`, 'success');
       setEditingAsset(null);
       
-      // Force the parent to refetch the user data
+      // Force the parent to refetch the user data, which updates this component too
       if (onRefetch) {
         await onRefetch();
       }
