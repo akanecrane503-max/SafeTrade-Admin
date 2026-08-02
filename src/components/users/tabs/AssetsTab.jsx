@@ -24,28 +24,25 @@ export default function AssetsTab({ user, onRefetch }) {
       setLoading(true);
       
       try {
-        // Use your EXISTING userService to fetch the user again. 
-        // This avoids Supabase RLS permission errors.
         const freshUserData = await userService.getUserById(user.id);
 
         if (freshUserData) {
           // Map the data to match your UI
           const realAssets = SUPPORTED_ASSETS.map((coin) => {
-            // Grab the balance from the fresh user data (lowercase column names)
-            const columnName = coin.toLowerCase();
-            const balance = Number(freshUserData[columnName] || 0);
+            // Lookup the balance directly using the COIN NAME as the key (Uppercase to match DB)
+            const balance = Number(freshUserData[coin] || 0);
             
             return {
               coin: coin,
               balance: balance,
-              usdValue: 0, // Placeholder for USD value
+              usdValue: 0, 
             };
           });
           setAssets(realAssets);
         }
       } catch (err) {
         console.error("Failed to fetch assets:", err);
-        addToast("Could not load user assets. Please refresh the page.", 'error');
+        addToast("Could not load user assets.", 'error');
       } finally {
         setLoading(false);
       }
@@ -63,11 +60,11 @@ export default function AssetsTab({ user, onRefetch }) {
     e.preventDefault();
     setSaving(true);
     try {
+      // Pass the exact uppercase coin name to the service
       await userService.updateUserAsset(user.id, editingAsset.coin, Number(value));
       addToast(`${editingAsset.coin} balance updated`, 'success');
       setEditingAsset(null);
       
-      // Force the parent to refetch the user data, which updates this component too
       if (onRefetch) {
         await onRefetch();
       }
