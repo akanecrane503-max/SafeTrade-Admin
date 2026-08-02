@@ -1,25 +1,61 @@
-import api from './api';
-import { supabase } from '../lib/supabase';
-export async function getUsers(params = {}) {
+import api from "./api";
+import { supabase } from "../lib/supabase";
+
+/* ============================================================
+   USERS
+============================================================ */
+
+export async function getUsers() {
   const { data, error } = await supabase
-    .from('profiles')
-    .select('id, uid, full_name, email, country, role, status, created_at')
-    .order('created_at', { ascending: false });
+    .from("profiles")
+    .select(
+      `
+        id,
+        uid,
+        full_name,
+        email,
+        country,
+        role,
+        status,
+        created_at,
+        portfolio_usd,
+        btc,
+        eth,
+        bnb,
+        sol,
+        xrp,
+        usdt
+      `
+    )
+    .order("uid", { ascending: true });
+
   if (error) {
     throw new Error(error.message);
   }
-  const items = (data || []).map((row) => ({
-    id: row.id,
-    uid: row.uid,
-    name: row.full_name,
-    email: row.email,
-    country: row.country,
-    role: row.role,
-    status: row.status,
-    createdAt: row.created_at,
-  }));
-  return { items };
+
+  return {
+    items: (data || []).map((row) => ({
+      id: row.id,
+      uid: row.uid,
+      name: row.full_name,
+      email: row.email,
+      country: row.country,
+      role: row.role,
+      status: row.status,
+      createdAt: row.created_at,
+
+      portfolio_usd: Number(row.portfolio_usd || 0),
+
+      btc: Number(row.btc || 0),
+      eth: Number(row.eth || 0),
+      bnb: Number(row.bnb || 0),
+      sol: Number(row.sol || 0),
+      xrp: Number(row.xrp || 0),
+      usdt: Number(row.usdt || 0),
+    })),
+  };
 }
+
 export async function getUserById(id) {
   const { data, error } = await supabase
     .from("profiles")
@@ -27,31 +63,58 @@ export async function getUserById(id) {
     .eq("id", id)
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    throw new Error(error.message);
+  }
 
   return {
     id: data.id,
     uid: data.uid,
+
     name: data.full_name,
     email: data.email,
+
     role: data.role,
     status: data.status,
+
     country: data.country,
-    portfolio_usd: data.portfolio_usd,
-    btc: data.btc,
-    eth: data.eth,
-    bnb: data.bnb,
-    sol: data.sol,
-    xrp: data.xrp,
-    usdt: data.usdt,
+
+    portfolio_usd: Number(data.portfolio_usd || 0),
+
+    btc: Number(data.btc || 0),
+    eth: Number(data.eth || 0),
+    bnb: Number(data.bnb || 0),
+    sol: Number(data.sol || 0),
+    xrp: Number(data.xrp || 0),
+    usdt: Number(data.usdt || 0),
+
     createdAt: data.created_at,
     lastLogin: data.last_login,
     isOnline: data.is_online,
   };
 }
-// Full detail payload: profile, security, assets, trading, wallets, kyc, binding, notes
+
+/* ============================================================
+   USER DETAIL
+============================================================ */
+
 export async function getUserDetail(id) {
   const profile = await getUserById(id);
+
+  const { data: walletRows, error: walletError } = await supabase
+    .from("wallet_addresses")
+    .select("*")
+    .eq("user_id", id);
+
+  if (walletError) {
+    throw new Error(walletError.message);
+  }
+
+  const wallets = {};
+
+  (walletRows || []).forEach((wallet) => {
+    wallets[wallet.network] = wallet.address;
+  });
 
   return {
     ...profile,
@@ -88,42 +151,63 @@ export async function getUserDetail(id) {
         usdValue: profile.usdt,
       },
     ],
+
+    wallets,
   };
 }
+
+/* ============================================================
+   USER
+============================================================ */
+
 export async function updateUser(id, payload) {
   const { data } = await api.put(`/users/${id}`, payload);
   return data;
 }
+
 export async function suspendUser(id) {
   const { data } = await api.post(`/users/${id}/suspend`);
   return data;
 }
+
 export async function activateUser(id) {
   const { data } = await api.post(`/users/${id}/activate`);
   return data;
 }
+
 export async function deleteUser(id) {
   const { data } = await api.delete(`/users/${id}`);
   return data;
 }
-// --- Security ---
+
+/* ============================================================
+   SECURITY
+============================================================ */
+
 export async function resetUserPassword(id) {
   const { data } = await api.post(`/users/${id}/reset-password`);
   return data;
 }
+
 export async function suspendUserLogin(id) {
   const { data } = await api.post(`/users/${id}/suspend-login`);
   return data;
 }
+
 export async function freezeUserAccount(id) {
   const { data } = await api.post(`/users/${id}/freeze`);
   return data;
 }
+
 export async function activateUserAccount(id) {
   const { data } = await api.post(`/users/${id}/reactivate`);
   return data;
 }
-// --- Assets ---
+
+/* ============================================================
+   ASSETS
+============================================================ */
+
 export async function updateUserAsset(
   userId,
   coin,
@@ -183,36 +267,133 @@ export async function updateUserAsset(
     success: true,
   };
 }
-// --- Wallets ---
-export async function updateUserWalletAddress(id, network, address) {
-  const { data } = await api.put(`/users/${id}/wallets/${network}`, { address });
-  return data;
+
+/* ============================================================
+   WALLETS
+============================================================ */
+
+export async function updateUserWalletAddress(
+  userId,
+  network,
+  address
+) {
+  const NETWORK_MAP = {
+    bitcoin: "BTC",
+    erc20: "ETH",
+    trc20: "USDT",
+    bep20: "USDT",
+    solana: "SOL",
+    xrpl: "XRP",
+    dogecoin: "DOGE",
+    cardano: "ADA",
+    polygon: "MATIC",
+    tron: "TRX",
+  };
+
+  const coin =
+    NETWORK_MAP[network] ||
+    network.toUpperCase();
+
+  const { data: existing, error: findError } = await supabase
+    .from("wallet_addresses")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("network", network)
+    .maybeSingle();
+
+  if (findError) {
+    throw new Error(findError.message);
+  }
+
+  if (existing) {
+    const { error } = await supabase
+      .from("wallet_addresses")
+      .update({
+        address,
+      })
+      .eq("id", existing.id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  } else {
+    const { error } = await supabase
+      .from("wallet_addresses")
+      .insert({
+        user_id: userId,
+        coin,
+        network,
+        address,
+        memo: null,
+        status: "active",
+      });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  return {
+    success: true,
+  };
 }
-// --- KYC ---
+
+/* ============================================================
+   KYC
+============================================================ */
+
 export async function approveUserKyc(id) {
   const { data } = await api.post(`/users/${id}/kyc/approve`);
   return data;
 }
+
 export async function denyUserKyc(id, reason) {
-  const { data } = await api.post(`/users/${id}/kyc/deny`, { reason });
+  const { data } = await api.post(`/users/${id}/kyc/deny`, {
+    reason,
+  });
   return data;
 }
-// --- Account Binding ---
+
+/* ============================================================
+   ACCOUNT BINDING
+============================================================ */
+
 export async function approveUserBinding(id) {
   const { data } = await api.post(`/users/${id}/binding/approve`);
   return data;
 }
+
 export async function denyUserBinding(id, reason) {
-  const { data } = await api.post(`/users/${id}/binding/deny`, { reason });
+  const { data } = await api.post(`/users/${id}/binding/deny`, {
+    reason,
+  });
   return data;
 }
-// --- Admin Notes ---
+
+/* ============================================================
+   ADMIN NOTES
+============================================================ */
+
 export async function addAdminNote(id, note) {
-  const { data } = await api.post(`/users/${id}/notes`, { note });
+  const { data } = await api.post(`/users/${id}/notes`, {
+    note,
+  });
   return data;
 }
-// --- Activity ---
-export async function getUserActivity(id, params = {}) {
-  const { data } = await api.get(`/users/${id}/activity`, { params });
+
+/* ============================================================
+   USER ACTIVITY
+============================================================ */
+
+export async function getUserActivity(
+  id,
+  params = {}
+) {
+  const { data } = await api.get(
+    `/users/${id}/activity`,
+    {
+      params,
+    }
+  );
   return data;
 }
