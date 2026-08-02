@@ -1,12 +1,12 @@
 import { supabase } from "../lib/supabase";
 import { getUserById, updateUserAsset } from "./userService";
 
-// Trade management via Supabase.
 const TRADE_SELECT_WITH_PROFILE = `
   *,
   profiles (
     full_name,
-    email
+    email,
+    trade_mode
   )
 `;
 
@@ -65,68 +65,97 @@ export async function createTrade(tradePayload) {
   return data;
 }
 
-export async function closeTrade(id) {
-  const { data, error } = await supabase
+/* ============================================================
+   AUTO-CALCULATE SETTLEMENT (NOW CHECKS USER MODE)
+============================================================ */
+export async function settleExpiredTrades() {
+  // 1. Fetch all "open" trades that have passed their expiration time
+  const { data: openTrades, error } = await supabase
     .from("trade_history")
-    .update({ status: "closed" })
-    .eq("id", id)
-    .select()
-    .single();
+    .select(TRADE_SELECT_WITH_PROFILE)
+    .eq("status", "open")
+    .lt("expires_at", new Date().toISOString()); // Ensure your trade_history has an 'expires_at' column
+
   if (error) throw error;
-  return data;
+
+  for (const trade of openTrades) {
+    let forcedOutcome = null;
+    const userMode = trade.profiles?.trade_mode || 'neutral';
+
+    // 2. Check if Admin has forced a global Win/Lose mode on this user
+    if (userMode === 'win') forcedOutcome = 'win';
+    else if (userMode === 'lose') forcedOutcome = 'lose';
+
+    // 3. If a global mode exists, force it. If neutral, calculate normally (Assume market logic here).
+    // For now, we treat 'neutral' as a default 50% win/lose based on something, or just skip it.
+    // Since your prompt asks for the Win/Lose mode specifically, we'll apply it:
+    
+    if (forcedOutcome) {
+      await adminForceSettleTrade(trade.id, forcedOutcome);
+    } else {
+      // TODO: If you want standard Market logic for NEUTRAL, place it here.
+      // Example: const marketWin = checkMarketPrice(trade); if(marketWin) adminForceSettleTrade(trade.id, 'win');
+    }
+  }
 }
 
 /* ============================================================
-   ADMIN AUTO WIN / AUTO LOSE LOGIC
+   ADMIN FORCE WIN / LOSE LOGIC
 ============================================================ */
 export async function adminForceSettleTrade(tradeId, outcome) {
-  // 1. Fetch the trade
   const trade = await getTradeById(tradeId);
   if (!trade) throw new Error("Trade not found.");
   if (trade.status === "closed") throw new Error("Trade is already closed.");
 
-  // 2. Calculate Profit/Loss
   let profitAmount = 0;
   let userBalanceUpdate = 0;
-  let endingPrice = trade.entry_price; // default if needed
 
-  // If they bet 100 USDT and win, they get 180 USDT (Stake + 80% profit) - adjust the math to your platform logic!
-  const payoutMultiplier = 1.8; 
+  const payoutMultiplier = 1.8; // 80% profit
 
   if (outcome === 'win') {
     profitAmount = (trade.amount * payoutMultiplier) - trade.amount;
-    userBalanceUpdate = trade.amount + profitAmount; // Return stake + profit
+    userBalanceUpdate = trade.amount + profitAmount;
   } else if (outcome === 'lose') {
     profitAmount = -trade.amount;
-    userBalanceUpdate = 0; // They lose their stake
+    userBalanceUpdate = 0;
   } else {
     throw new Error("Invalid outcome type.");
   }
 
-  // 3. Update the User's Balance (USDT)
-  // The updateUserAsset function will add/subtract the USDT safely
+  // Update User Balance
   await updateUserAsset(
     trade.user_id, 
     'USDT', 
     userBalanceUpdate, 
     `admin_${outcome}`, 
-    `Admin Auto-${outcome.toUpperCase()} on trade ${tradeId}`
+    `Auto-${outcome.toUpperCase()} via User Trade Mode`
   );
 
-  // 4. Update the Trade History Table
+  // Update Trade History
   const { data, error } = await supabase
     .from("trade_history")
     .update({
       status: "closed",
-      outcome: outcome, // 'win' or 'lose'
+      outcome: outcome,
       profit_amount: profitAmount,
-      ending_price: endingPrice,
       closed_at: new Date().toISOString(),
     })
     .eq("id", tradeId)
     .select()
     .single();
 
+  if (error) throw error;
+  return data;
+}
+
+export async function closeTrade(id) {
+  // Fallback standard close
+  const { data, error } = await supabase
+    .from("trade_history")
+    .update({ status: "closed" })
+    .eq("id", id)
+    .select()
+    .single();
   if (error) throw error;
   return data;
 }
