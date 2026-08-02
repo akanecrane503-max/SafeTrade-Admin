@@ -6,7 +6,6 @@ import { useToast } from '../../common/Toast.jsx';
 import * as userService from '../../../services/userService';
 import { formatCrypto, formatCurrency } from '../../../utils/formatters';
 
-// The static list of coins the platform supports
 const SUPPORTED_ASSETS = ['BTC', 'ETH', 'SOL', 'XRP', 'BNB', 'USDT', 'USDC'];
 
 export default function AssetsTab({ user, onRefetch }) {
@@ -17,38 +16,43 @@ export default function AssetsTab({ user, onRefetch }) {
   const [loading, setLoading] = useState(true);
   const { addToast } = useToast();
 
-  // --- FETCH REAL BALANCES (Triggered whenever the user object changes) ---
+  // Hardcoded current market prices (You can replace this with an API call later)
+  const MARKET_PRICES = {
+    BTC: 63437,
+    ETH: 1882.47,
+    SOL: 73.64,
+    XRP: 1.08,
+    BNB: 588.56,
+    USDT: 1.00,
+    USDC: 1.00,
+  };
+
   useEffect(() => {
     async function fetchRealBalances() {
       if (!user?.id) return;
       setLoading(true);
-      
       try {
-        // Fetch the absolute latest data directly from the database
         const freshUserData = await userService.getUserById(user.id);
-
         if (freshUserData) {
-          // Map the data to match your UI
           const realAssets = SUPPORTED_ASSETS.map((coin) => {
             const balance = Number(freshUserData[coin] || 0);
+            const price = MARKET_PRICES[coin] || 0; // Fetch price from map
             return {
               coin: coin,
               balance: balance,
-              usdValue: 0, 
+              usdValue: balance * price, // CALCULATE USD VALUE HERE
             };
           });
           setAssets(realAssets);
         }
       } catch (err) {
         console.error("Failed to fetch assets:", err);
-        // Do NOT show an error toast here to avoid spamming the admin
       } finally {
         setLoading(false);
       }
     }
-
     fetchRealBalances();
-  }, [user?.id]); // Triggers whenever the user ID changes or is re-fetched
+  }, [user?.id]);
 
   function openEdit(asset) {
     setEditingAsset(asset);
@@ -62,11 +66,7 @@ export default function AssetsTab({ user, onRefetch }) {
       await userService.updateUserAsset(user.id, editingAsset.coin, Number(value));
       addToast(`${editingAsset.coin} balance updated`, 'success');
       setEditingAsset(null);
-      
-      // Force the Admin Panel to instantly refresh the table
-      if (onRefetch) {
-        await onRefetch();
-      }
+      if (onRefetch) await onRefetch();
     } catch (err) {
       addToast(err.message || 'Failed to update balance', 'error');
     } finally {
