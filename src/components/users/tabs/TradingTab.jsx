@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Power, TrendingUp, TrendingDown, Loader2, CheckCircle2, XCircle, CircleDashed } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '../../../lib/supabase'; // <--- Fixed relative import
 import ConfirmDialog from '../../common/ConfirmDialog.jsx';
 import { useToast } from '../../common/Toast.jsx';
 import * as tradingService from '../../../services/tradingService';
@@ -85,7 +85,7 @@ export default function TradingTab({ user, onRefetch }) {
       
       setTradeMode(newMode);
       addToast(`Trade mode updated to ${newMode.toUpperCase()}`, 'success');
-      onRefetch?.(); // Refresh parent just in case
+      onRefetch?.();
     } catch (err) {
       addToast(err.message || 'Failed to update trade mode', 'error');
       setTradeMode(tradeMode); 
@@ -94,16 +94,14 @@ export default function TradingTab({ user, onRefetch }) {
     }
   }
 
-  // 3. TOGGLE TRADING STATUS - FIXED SYNC ISSUE
+  // 3. TOGGLE TRADING STATUS
   async function handleToggle() {
     setLoading(true);
     try {
-      // Call the backend service to flip the switch
       await tradingService.toggleUserTrading(user.id, !enabled);
       addToast(`Trading ${!enabled ? 'enabled' : 'disabled'}`, 'success');
       setConfirmOpen(false);
       
-      // CRUCIAL: Trigger the parent to re-fetch the user data from the DB
       if (onRefetch) {
         await onRefetch();
       }
