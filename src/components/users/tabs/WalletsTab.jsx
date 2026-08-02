@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Pencil } from "lucide-react";
 import Modal from "../../common/Modal.jsx";
 import { useToast } from "../../common/Toast.jsx";
+import { supabase } from "../../../lib/supabase"; // Direct Supabase import
 import * as userService from "../../../services/userService";
 import { truncateAddress } from "../../../utils/formatters";
 
@@ -23,10 +24,40 @@ export default function WalletsTab({ user, onRefetch }) {
   const [editingWallet, setEditingWallet] = useState(null);
   const [address, setAddress] = useState("");
   const [saving, setSaving] = useState(false);
+  
+  // State to hold the REAL addresses from the database
+  const [walletAddresses, setWalletAddresses] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  // --- DIRECT FETCH FROM DATABASE ---
+  const fetchWallets = async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    
+    const { data, error } = await supabase
+      .from("wallet_addresses")
+      .select("network, address")
+      .eq("user_id", user.id);
+
+    if (!error && data) {
+      // Convert array to object: { bitcoin: "1A1...", solana: "7G..." }
+      const walletMap = {};
+      data.forEach((item) => {
+        walletMap[item.network] = item.address;
+      });
+      setWalletAddresses(walletMap);
+    }
+    setLoading(false);
+  };
+
+  // Run on load, and whenever the user ID changes
+  useEffect(() => {
+    fetchWallets();
+  }, [user?.id]);
 
   function openEdit(wallet) {
     setEditingWallet(wallet);
-    setAddress(user.wallets?.[wallet.network] || "");
+    setAddress(walletAddresses[wallet.network] || "");
   }
 
   async function handleSave(e) {
@@ -42,7 +73,10 @@ export default function WalletsTab({ user, onRefetch }) {
       addToast(`${editingWallet.label} updated`, "success");
       setEditingWallet(null);
       
-      // CRITICAL FIX: Force the parent to reload the user data so the wallet list updates
+      // Force a re-fetch to display the new address instantly
+      await fetchWallets();
+      
+      // Also tell the parent to update just in case
       if (onRefetch) {
         await onRefetch();
       }
@@ -59,33 +93,41 @@ export default function WalletsTab({ user, onRefetch }) {
         User Deposit Wallets
       </h3>
 
-      <div className="space-y-3">
-        {NETWORKS.map((wallet) => {
-          // This pulls the real address from the fresh user data
-          const value = user.wallets?.[wallet.network] || "";
-          return (
-            <div
-              key={wallet.network}
-              className="flex items-center justify-between rounded-xl bg-slate-800/40 p-3"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-200">
-                  {wallet.label}
-                </p>
-                <p className="truncate font-mono text-xs text-slate-500">
-                  {value ? truncateAddress(value) : "Not assigned"}
-                </p>
-              </div>
-              <button
-                onClick={() => openEdit(wallet)}
-                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-700 hover:text-white"
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-16 bg-slate-800/40 rounded-xl animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {NETWORKS.map((wallet) => {
+            // Get the address from our direct fetch, NOT from the user prop
+            const value = walletAddresses[wallet.network] || "";
+            return (
+              <div
+                key={wallet.network}
+                className="flex items-center justify-between rounded-xl bg-slate-800/40 p-3"
               >
-                <Pencil className="h-4 w-4" />
-              </button>
-            </div>
-          );
-        })}
-      </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-200">
+                    {wallet.label}
+                  </p>
+                  <p className="truncate font-mono text-xs text-slate-500">
+                    {value ? truncateAddress(value) : "Not assigned"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => openEdit(wallet)}
+                  className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-700 hover:text-white"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <Modal
         open={Boolean(editingWallet)}
