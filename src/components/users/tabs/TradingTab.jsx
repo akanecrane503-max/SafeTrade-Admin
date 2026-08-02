@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Power, TrendingUp, TrendingDown, Loader2, CheckCircle2, XCircle, CircleDashed } from 'lucide-react';
-import { supabase } from '../../../lib/supabase'; // <--- Fixed relative import
+import { supabase } from '../../../lib/supabase';
 import ConfirmDialog from '../../common/ConfirmDialog.jsx';
 import { useToast } from '../../common/Toast.jsx';
 import * as tradingService from '../../../services/tradingService';
@@ -24,43 +24,38 @@ export default function TradingTab({ user, onRefetch }) {
 
   const [openTrades, setOpenTrades] = useState([]);
   const [tradesLoading, setTradesLoading] = useState(true);
+  const [enabled, setEnabled] = useState(Boolean(user?.tradingEnabled));
   
   const [settlingTrade, setSettlingTrade] = useState(null);
   const [settlingOutcome, setSettlingOutcome] = useState(null);
   const [confirmSettleOpen, setConfirmSettleOpen] = useState(false);
   const [settlingLoading, setSettlingLoading] = useState(false);
 
-  const enabled = Boolean(user.tradingEnabled);
-
-  // 1. FETCH USER DATA & TRADES
+  // 1. FETCH USER DATA, TRADES & MODE
   useEffect(() => {
     async function loadUserData() {
       if (!user?.id && !user?.email) return;
       setTradesLoading(true);
       try {
-        let query = supabase
-          .from("trade_history")
-          .select("*")
-          .eq("status", "open");
-
-        if (user.id) {
-          query = query.eq("user_id", user.id);
-        } else if (user.email) {
-          query = query.eq("user_email", user.email);
-        }
+        // Fetch Trades
+        let query = supabase.from("trade_history").select("*").eq("status", "open");
+        if (user.id) query = query.eq("user_id", user.id);
+        else if (user.email) query = query.eq("user_email", user.email);
 
         const { data, error } = await query;
         if (error) throw error;
         setOpenTrades(data || []);
 
+        // Fetch Profile Data (Mode and Enabled)
         const { data: profileData, error: profileError } = await supabase
           .from("profiles")
-          .select("mode") 
+          .select("mode, trading_enabled") 
           .eq("id", user.id)
           .single();
           
         if (!profileError && profileData) {
           setTradeMode(profileData.mode || 'neutral');
+          setEnabled(Boolean(profileData.trading_enabled));
         }
       } catch (err) {
         console.error("Failed to load data", err);
@@ -94,17 +89,24 @@ export default function TradingTab({ user, onRefetch }) {
     }
   }
 
-  // 3. TOGGLE TRADING STATUS
+  // 3. TOGGLE TRADING STATUS (FORCES RELOAD VIA DIRECT DB CALL)
   async function handleToggle() {
     setLoading(true);
     try {
-      await tradingService.toggleUserTrading(user.id, !enabled);
-      addToast(`Trading ${!enabled ? 'enabled' : 'disabled'}`, 'success');
+      // Update Database directly here to ensure it works
+      const newStatus = !enabled;
+      const { error } = await supabase
+        .from("profiles")
+        .update({ trading_enabled: newStatus })
+        .eq("id", user.id);
+
+      if (error) throw error;
+      
+      setEnabled(newStatus); // Immediately update local state
+      addToast(`Trading ${newStatus ? 'enabled' : 'disabled'}`, 'success');
       setConfirmOpen(false);
       
-      if (onRefetch) {
-        await onRefetch();
-      }
+      if (onRefetch) await onRefetch();
     } catch (err) {
       addToast(err.message || 'Failed to update trading status', 'error');
     } finally {
