@@ -17,6 +17,7 @@ export async function getUsers() {
         country,
         role,
         status,
+        trade_mode,
         created_at,
         portfolio_usd,
         btc,
@@ -42,6 +43,7 @@ export async function getUsers() {
       country: row.country,
       role: row.role,
       status: row.status,
+      tradeMode: row.trade_mode || 'neutral', // Mapping database column to frontend prop
       createdAt: row.created_at,
 
       portfolio_usd: Number(row.portfolio_usd || 0),
@@ -76,6 +78,7 @@ export async function getUserById(id) {
 
     role: data.role,
     status: data.status,
+    tradeMode: data.trade_mode || 'neutral', // Mapping database column to frontend prop
 
     country: data.country,
 
@@ -120,36 +123,12 @@ export async function getUserDetail(id) {
     ...profile,
 
     assets: [
-      {
-        coin: "BTC",
-        balance: profile.btc,
-        usdValue: 0,
-      },
-      {
-        coin: "ETH",
-        balance: profile.eth,
-        usdValue: 0,
-      },
-      {
-        coin: "BNB",
-        balance: profile.bnb,
-        usdValue: 0,
-      },
-      {
-        coin: "SOL",
-        balance: profile.sol,
-        usdValue: 0,
-      },
-      {
-        coin: "XRP",
-        balance: profile.xrp,
-        usdValue: 0,
-      },
-      {
-        coin: "USDT",
-        balance: profile.usdt,
-        usdValue: profile.usdt,
-      },
+      { coin: "BTC", balance: profile.btc, usdValue: 0 },
+      { coin: "ETH", balance: profile.eth, usdValue: 0 },
+      { coin: "BNB", balance: profile.bnb, usdValue: 0 },
+      { coin: "SOL", balance: profile.sol, usdValue: 0 },
+      { coin: "XRP", balance: profile.xrp, usdValue: 0 },
+      { coin: "USDT", balance: profile.usdt, usdValue: profile.usdt },
     ],
 
     wallets,
@@ -161,8 +140,34 @@ export async function getUserDetail(id) {
 ============================================================ */
 
 export async function updateUser(id, payload) {
+  // Support updating trade_mode via this standard function as well
   const { data } = await api.put(`/users/${id}`, payload);
   return data;
+}
+
+/* ============================================================
+   ⚡ NEW: ADMIN TRADE MODE TOGGLE (WIN / LOSE / NEUTRAL)
+============================================================ */
+export async function updateUserTradeMode(userId, newMode) {
+  if (!['neutral', 'win', 'lose'].includes(newMode)) {
+    throw new Error("Invalid trade mode. Must be 'neutral', 'win', or 'lose'.");
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ trade_mode: newMode })
+    .eq("id", userId)
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    success: true,
+    tradeMode: data.trade_mode
+  };
 }
 
 export async function suspendUser(id) {
@@ -233,18 +238,14 @@ export async function updateUserAsset(
 
   const { error: updateError } = await supabase
     .from("profiles")
-    .update({
-      [column]: after,
-    })
+    .update({ [column]: after })
     .eq("id", userId);
 
   if (updateError) {
     throw new Error(updateError.message);
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
   const { error: historyError } = await supabase
     .from("admin_balance_history")
@@ -263,20 +264,14 @@ export async function updateUserAsset(
     throw new Error(historyError.message);
   }
 
-  return {
-    success: true,
-  };
+  return { success: true };
 }
 
 /* ============================================================
    WALLETS
 ============================================================ */
 
-export async function updateUserWalletAddress(
-  userId,
-  network,
-  address
-) {
+export async function updateUserWalletAddress(userId, network, address) {
   const NETWORK_MAP = {
     bitcoin: "BTC",
     erc20: "ETH",
@@ -290,9 +285,7 @@ export async function updateUserWalletAddress(
     tron: "TRX",
   };
 
-  const coin =
-    NETWORK_MAP[network] ||
-    network.toUpperCase();
+  const coin = NETWORK_MAP[network] || network.toUpperCase();
 
   const { data: existing, error: findError } = await supabase
     .from("wallet_addresses")
@@ -308,9 +301,7 @@ export async function updateUserWalletAddress(
   if (existing) {
     const { error } = await supabase
       .from("wallet_addresses")
-      .update({
-        address,
-      })
+      .update({ address })
       .eq("id", existing.id);
 
     if (error) {
@@ -333,9 +324,7 @@ export async function updateUserWalletAddress(
     }
   }
 
-  return {
-    success: true,
-  };
+  return { success: true };
 }
 
 /* ============================================================
@@ -348,9 +337,7 @@ export async function approveUserKyc(id) {
 }
 
 export async function denyUserKyc(id, reason) {
-  const { data } = await api.post(`/users/${id}/kyc/deny`, {
-    reason,
-  });
+  const { data } = await api.post(`/users/${id}/kyc/deny`, { reason });
   return data;
 }
 
@@ -364,9 +351,7 @@ export async function approveUserBinding(id) {
 }
 
 export async function denyUserBinding(id, reason) {
-  const { data } = await api.post(`/users/${id}/binding/deny`, {
-    reason,
-  });
+  const { data } = await api.post(`/users/${id}/binding/deny`, { reason });
   return data;
 }
 
@@ -375,9 +360,7 @@ export async function denyUserBinding(id, reason) {
 ============================================================ */
 
 export async function addAdminNote(id, note) {
-  const { data } = await api.post(`/users/${id}/notes`, {
-    note,
-  });
+  const { data } = await api.post(`/users/${id}/notes`, { note });
   return data;
 }
 
@@ -385,15 +368,7 @@ export async function addAdminNote(id, note) {
    USER ACTIVITY
 ============================================================ */
 
-export async function getUserActivity(
-  id,
-  params = {}
-) {
-  const { data } = await api.get(
-    `/users/${id}/activity`,
-    {
-      params,
-    }
-  );
+export async function getUserActivity(id, params = {}) {
+  const { data } = await api.get(`/users/${id}/activity`, { params });
   return data;
 }
