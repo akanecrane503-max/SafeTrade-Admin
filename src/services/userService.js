@@ -49,13 +49,14 @@ export async function getUsers() {
 
       portfolio_usd: Number(row.portfolio_usd || 0),
 
-      btc: Number(row.BTC || 0),
-      eth: Number(row.ETH || 0),
-      bnb: Number(row.BNB || 0),
-      sol: Number(row.SOL || 0),
-      xrp: Number(row.XRP || 0),
-      usdt: Number(row.USDT || 0),
-      usdc: Number(row.USDC || 0), // Added USDC
+      // Fix: Use bracket notation to ensure uppercase is read properly
+      btc: Number(row["BTC"] || 0),
+      eth: Number(row["ETH"] || 0),
+      bnb: Number(row["BNB"] || 0),
+      sol: Number(row["SOL"] || 0),
+      xrp: Number(row["XRP"] || 0),
+      usdt: Number(row["USDT"] || 0),
+      usdc: Number(row["USDC"] || 0),
     })),
   };
 }
@@ -86,13 +87,14 @@ export async function getUserById(id) {
 
     portfolio_usd: Number(data.portfolio_usd || 0),
 
-    btc: Number(data.BTC || 0),
-    eth: Number(data.ETH || 0),
-    bnb: Number(data.BNB || 0),
-    sol: Number(data.SOL || 0),
-    xrp: Number(data.XRP || 0),
-    usdt: Number(data.USDT || 0),
-    usdc: Number(data.USDC || 0), // Added USDC
+    // Fix: Use bracket notation to ensure uppercase is read properly
+    btc: Number(data["BTC"] || 0),
+    eth: Number(data["ETH"] || 0),
+    bnb: Number(data["BNB"] || 0),
+    sol: Number(data["SOL"] || 0),
+    xrp: Number(data["XRP"] || 0),
+    usdt: Number(data["USDT"] || 0),
+    usdc: Number(data["USDC"] || 0),
 
     createdAt: data.created_at,
     lastLogin: data.last_login,
@@ -132,7 +134,7 @@ export async function getUserDetail(id) {
       { coin: "SOL", balance: profile.sol, usdValue: 0 },
       { coin: "XRP", balance: profile.xrp, usdValue: 0 },
       { coin: "USDT", balance: profile.usdt, usdValue: profile.usdt },
-      { coin: "USDC", balance: profile.usdc, usdValue: profile.usdc }, // Added USDC
+      { coin: "USDC", balance: profile.usdc, usdValue: profile.usdc },
     ],
 
     wallets,
@@ -220,7 +222,6 @@ export async function updateUserAsset(
   type = "adjustment",
   description = ""
 ) {
-  // Force the column name to be Uppercase to match Supabase schema
   const column = coin.toUpperCase();
 
   const { data: profile, error: profileError } = await supabase
