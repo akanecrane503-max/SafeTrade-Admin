@@ -7,7 +7,7 @@ import * as userService from '../services/userService';
 import { cn } from '../utils/helpers';
 import { formatDate } from '../utils/formatters';
 
-// Tab Components (Assuming you have these in your project based on your tree)
+// Tab Components
 import ProfileTab from '../components/users/tabs/ProfileTab';
 import SecurityTab from '../components/users/tabs/SecurityTab';
 import AssetsTab from '../components/users/tabs/AssetsTab';
@@ -41,11 +41,7 @@ export default function UserDetail() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadUser();
-  }, [id]);
-
-  async function loadUser() {
+  const loadUser = async () => {
     setLoading(true);
     try {
       const data = await userService.getUserById(id);
@@ -56,7 +52,11 @@ export default function UserDetail() {
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  useEffect(() => {
+    loadUser();
+  }, [id]);
 
   if (loading) {
     return (
@@ -104,14 +104,13 @@ export default function UserDetail() {
         </div>
       </div>
 
-      {/* Tab Content */}
+      {/* Tab Content - PASSING loadUser AS THE REFETCH FUNCTION NOW */}
       <div>
         {activeTab === 'profile' && (
           <div className="card p-6 space-y-6">
             <div className="flex items-center justify-between border-b border-slate-800/60 pb-4">
               <h3 className="text-lg font-semibold text-white">Profile</h3>
               <div className="flex items-center gap-3">
-                {/* --- NEW TRADE MODE BADGE ADDED HERE --- */}
                 {user?.tradeMode && user.tradeMode !== 'neutral' && (
                   <span className={cn(
                     'px-3 py-1 rounded-full text-xs font-bold border',
@@ -171,9 +170,9 @@ export default function UserDetail() {
         )}
 
         {activeTab === 'security' && <SecurityTab user={user} onRefetch={loadUser} />}
-        {activeTab === 'assets' && <AssetsTab user={user} />}
+        {activeTab === 'assets' && <AssetsTab user={user} onRefetch={loadUser} />} {/* Passed the refresh function! */}
         {activeTab === 'trading' && <TradingTab user={user} onRefetch={loadUser} />}
-        {activeTab === 'wallets' && <WalletsTab user={user} />}
+        {activeTab === 'wallets' && <WalletsTab user={user} onRefetch={loadUser} />} {/* Added refresh to wallets! */}
         {activeTab === 'withdrawals' && <WithdrawalsTab user={user} />}
         {activeTab === 'deposits' && <DepositsTab user={user} />}
         {activeTab === 'kyc' && <KycTab user={user} onRefetch={loadUser} />}
