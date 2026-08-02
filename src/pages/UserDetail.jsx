@@ -1,108 +1,185 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
-import { useApi } from '../hooks/useApi';
+import { ArrowLeft, Pencil, User, Shield, Wallet, History, Activity, FileText, Settings } from 'lucide-react';
 import { useToast } from '../components/common/Toast.jsx';
 import LoadingSpinner from '../components/common/LoadingSpinner.jsx';
-import EmptyState from '../components/common/EmptyState.jsx';
 import * as userService from '../services/userService';
 import { cn } from '../utils/helpers';
-import { ROUTES } from '../utils/constants';
+import { formatDate } from '../utils/formatters';
 
-import ProfileTab from '../components/users/tabs/ProfileTab.jsx';
-import SecurityTab from '../components/users/tabs/SecurityTab.jsx';
-import AssetsTab from '../components/users/tabs/AssetsTab.jsx';
-import TradingTab from '../components/users/tabs/TradingTab.jsx';
-import WalletsTab from '../components/users/tabs/WalletsTab.jsx';
-import WithdrawalsTab from '../components/users/tabs/WithdrawalsTab.jsx';
-import DepositsTab from '../components/users/tabs/DepositsTab.jsx';
-import KycTab from '../components/users/tabs/KycTab.jsx';
-import BindingTab from '../components/users/tabs/BindingTab.jsx';
-import AdminNotesTab from '../components/users/tabs/AdminNotesTab.jsx';
-import ActivityTab from '../components/users/tabs/ActivityTab.jsx';
+// Tab Components (Assuming you have these in your project based on your tree)
+import ProfileTab from '../components/users/tabs/ProfileTab';
+import SecurityTab from '../components/users/tabs/SecurityTab';
+import AssetsTab from '../components/users/tabs/AssetsTab';
+import TradingTab from '../components/users/tabs/TradingTab';
+import WalletsTab from '../components/users/tabs/WalletsTab';
+import WithdrawalsTab from '../components/users/tabs/WithdrawalsTab';
+import DepositsTab from '../components/users/tabs/DepositsTab';
+import KycTab from '../components/users/tabs/KycTab';
+import BindingTab from '../components/users/tabs/BindingTab';
+import AdminNotesTab from '../components/users/tabs/AdminNotesTab';
 
 const TABS = [
-  { key: 'profile', label: 'Profile', Component: ProfileTab },
-  { key: 'security', label: 'Security', Component: SecurityTab },
-  { key: 'assets', label: 'Assets', Component: AssetsTab },
-  { key: 'trading', label: 'Trading', Component: TradingTab },
-  { key: 'wallets', label: 'Wallets', Component: WalletsTab },
-  { key: 'withdrawals', label: 'Withdrawals', Component: WithdrawalsTab },
-  { key: 'deposits', label: 'Deposits', Component: DepositsTab },
-  { key: 'kyc', label: 'KYC', Component: KycTab },
-  { key: 'binding', label: 'Binding', Component: BindingTab },
-  { key: 'notes', label: 'Admin Notes', Component: AdminNotesTab },
-  { key: 'activity', label: 'Activity', Component: ActivityTab },
+  { id: 'profile', label: 'Profile', icon: User },
+  { id: 'security', label: 'Security', icon: Shield },
+  { id: 'assets', label: 'Assets', icon: Wallet },
+  { id: 'trading', label: 'Trading', icon: Activity },
+  { id: 'wallets', label: 'Wallets', icon: Wallet },
+  { id: 'withdrawals', label: 'Withdrawals', icon: History },
+  { id: 'deposits', label: 'Deposits', icon: FileText },
+  { id: 'kyc', label: 'KYC', icon: Shield },
+  { id: 'binding', label: 'Binding', icon: Settings },
+  { id: 'notes', label: 'Admin Notes', icon: FileText },
 ];
 
 export default function UserDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addToast } = useToast();
+  
   const [activeTab, setActiveTab] = useState('profile');
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const { data: user, loading, refetch } = useApi(() => userService.getUserDetail(id), [id]);
+  useEffect(() => {
+    loadUser();
+  }, [id]);
 
-  function handleRefetch() {
-    refetch().catch(() => addToast('Failed to refresh user data', 'error'));
+  async function loadUser() {
+    setLoading(true);
+    try {
+      const data = await userService.getUserById(id);
+      setUser(data);
+    } catch (err) {
+      addToast(err.message || 'Failed to load user', 'error');
+      navigate('/users');
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (loading) {
     return (
-      <div className="card py-24">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <LoadingSpinner />
       </div>
     );
   }
 
-  if (!user) {
-    return (
-      <div className="card">
-        <EmptyState title="User not found" description="This user may have been removed." />
-      </div>
-    );
-  }
-
-  const ActiveComponent = TABS.find((t) => t.key === activeTab)?.Component || ProfileTab;
-
   return (
     <div className="space-y-6">
-      <button
-        onClick={() => navigate(ROUTES.USERS)}
-        className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to Users
-      </button>
-
-      <div className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-full bg-blue-600 flex items-center justify-center text-white text-xl font-semibold shrink-0">
-          {user.name?.charAt(0).toUpperCase()}
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-white">{user.name}</h1>
-          <p className="text-sm text-slate-500">{user.email}</p>
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <button onClick={() => navigate('/users')} className="text-slate-400 hover:text-white transition-colors p-2 -ml-2">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-white text-lg font-bold">
+            {user?.name?.charAt(0).toUpperCase() || 'U'}
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-white">{user?.name || 'Unknown User'}</h1>
+            <p className="text-sm text-slate-400">{user?.email}</p>
+          </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-1 overflow-x-auto border-b border-slate-800 -mx-1 px-1">
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={cn(
-              'shrink-0 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
-              activeTab === tab.key
-                ? 'text-blue-400 border-blue-500'
-                : 'text-slate-500 border-transparent hover:text-slate-300'
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* Tabs Navigation */}
+      <div className="border-b border-slate-800/60 overflow-x-auto no-scrollbar">
+        <div className="flex gap-1">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                'px-4 py-3 text-sm font-medium border-b-2 transition-all whitespace-nowrap',
+                activeTab === tab.id
+                  ? 'border-blue-500 text-blue-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <ActiveComponent user={user} onRefetch={handleRefetch} />
+      {/* Tab Content */}
+      <div>
+        {activeTab === 'profile' && (
+          <div className="card p-6 space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-800/60 pb-4">
+              <h3 className="text-lg font-semibold text-white">Profile</h3>
+              <div className="flex items-center gap-3">
+                {/* --- NEW TRADE MODE BADGE ADDED HERE --- */}
+                {user?.tradeMode && user.tradeMode !== 'neutral' && (
+                  <span className={cn(
+                    'px-3 py-1 rounded-full text-xs font-bold border',
+                    user.tradeMode === 'win' ? 'border-emerald-500 text-emerald-400 bg-emerald-500/10' : 
+                    'border-rose-500 text-rose-400 bg-rose-500/10'
+                  )}>
+                    {user.tradeMode === 'win' ? '⚡ AUTO WIN' : '⛔ AUTO LOSE'}
+                  </span>
+                )}
+                
+                <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold border border-emerald-500/20">
+                  {user?.status || 'active'}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-medium text-slate-500 block mb-1">UID</label>
+                  <p className="text-sm font-mono text-slate-300 break-all">{user?.id}</p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-500 block mb-1">Email</label>
+                  <p className="text-sm font-medium text-white">{user?.email || '—'}</p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-500 block mb-1">Last Login</label>
+                  <p className="text-sm text-slate-300">{user?.lastLogin ? formatDate(user.lastLogin) : '—'}</p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-500 block mb-1">Device</label>
+                  <p className="text-sm text-slate-300">—</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-medium text-slate-500 block mb-1">Username</label>
+                  <p className="text-sm text-slate-300">—</p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-500 block mb-1">Registration Date</label>
+                  <p className="text-sm text-slate-300">{user?.createdAt ? formatDate(user.createdAt) : '—'}</p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-500 block mb-1">Country</label>
+                  <p className="text-sm text-slate-300">{user?.country || '—'}</p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-500 block mb-1">IP Address</label>
+                  <p className="text-sm text-slate-300">—</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'security' && <SecurityTab user={user} onRefetch={loadUser} />}
+        {activeTab === 'assets' && <AssetsTab user={user} />}
+        {activeTab === 'trading' && <TradingTab user={user} onRefetch={loadUser} />}
+        {activeTab === 'wallets' && <WalletsTab user={user} />}
+        {activeTab === 'withdrawals' && <WithdrawalsTab user={user} />}
+        {activeTab === 'deposits' && <DepositsTab user={user} />}
+        {activeTab === 'kyc' && <KycTab user={user} onRefetch={loadUser} />}
+        {activeTab === 'binding' && <BindingTab user={user} onRefetch={loadUser} />}
+        {activeTab === 'notes' && <AdminNotesTab user={user} onRefetch={loadUser} />}
+      </div>
     </div>
   );
 }
