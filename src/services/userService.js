@@ -17,16 +17,15 @@ export async function getUsers() {
         country,
         role,
         status,
-        trade_mode,
         created_at,
         portfolio_usd,
-        "BTC",
-        "ETH",
-        "BNB",
-        "SOL",
-        "XRP",
-        "USDT",
-        "USDC"
+        btc,
+        eth,
+        bnb,
+        sol,
+        xrp,
+        usdt,
+        usdc
       `
     )
     .order("uid", { ascending: true });
@@ -44,18 +43,17 @@ export async function getUsers() {
       country: row.country,
       role: row.role,
       status: row.status,
-      tradeMode: row.trade_mode || 'neutral',
       createdAt: row.created_at,
 
       portfolio_usd: Number(row.portfolio_usd || 0),
 
-      BTC: Number(row["BTC"] || 0),
-      ETH: Number(row["ETH"] || 0),
-      BNB: Number(row["BNB"] || 0),
-      SOL: Number(row["SOL"] || 0),
-      XRP: Number(row["XRP"] || 0),
-      USDT: Number(row["USDT"] || 0),
-      USDC: Number(row["USDC"] || 0),
+      btc: Number(row.btc || 0),
+      eth: Number(row.eth || 0),
+      bnb: Number(row.bnb || 0),
+      sol: Number(row.sol || 0),
+      xrp: Number(row.xrp || 0),
+      usdt: Number(row.usdt || 0),
+      usdc: Number(row.usdc || 0),
     })),
   };
 }
@@ -80,20 +78,18 @@ export async function getUserById(id) {
 
     role: data.role,
     status: data.status,
-    tradeMode: data.trade_mode || 'neutral',
 
     country: data.country,
 
     portfolio_usd: Number(data.portfolio_usd || 0),
 
-    // THE CRITICAL FIX: Capitalized keys to match AssetsTab and SQL
-    BTC: Number(data["BTC"] || 0),
-    ETH: Number(data["ETH"] || 0),
-    BNB: Number(data["BNB"] || 0),
-    SOL: Number(data["SOL"] || 0),
-    XRP: Number(data["XRP"] || 0),
-    USDT: Number(data["USDT"] || 0),
-    USDC: Number(data["USDC"] || 0),
+    btc: Number(data.btc || 0),
+    eth: Number(data.eth || 0),
+    bnb: Number(data.bnb || 0),
+    sol: Number(data.sol || 0),
+    xrp: Number(data.xrp || 0),
+    usdt: Number(data.usdt || 0),
+    usdc: Number(data.usdc || 0),
 
     createdAt: data.created_at,
     lastLogin: data.last_login,
@@ -127,13 +123,41 @@ export async function getUserDetail(id) {
     ...profile,
 
     assets: [
-      { coin: "BTC", balance: profile.BTC, usdValue: 0 },
-      { coin: "ETH", balance: profile.ETH, usdValue: 0 },
-      { coin: "BNB", balance: profile.BNB, usdValue: 0 },
-      { coin: "SOL", balance: profile.SOL, usdValue: 0 },
-      { coin: "XRP", balance: profile.XRP, usdValue: 0 },
-      { coin: "USDT", balance: profile.USDT, usdValue: profile.USDT },
-      { coin: "USDC", balance: profile.USDC, usdValue: profile.USDC },
+      {
+        coin: "BTC",
+        balance: profile.btc,
+        usdValue: 0,
+      },
+      {
+        coin: "ETH",
+        balance: profile.eth,
+        usdValue: 0,
+      },
+      {
+        coin: "BNB",
+        balance: profile.bnb,
+        usdValue: 0,
+      },
+      {
+        coin: "SOL",
+        balance: profile.sol,
+        usdValue: 0,
+      },
+      {
+        coin: "XRP",
+        balance: profile.xrp,
+        usdValue: 0,
+      },
+      {
+        coin: "USDT",
+        balance: profile.usdt,
+        usdValue: profile.usdt,
+      },
+      {
+        coin: "USDC",
+        balance: profile.usdc,
+        usdValue: profile.usdc,
+      },
     ],
 
     wallets,
@@ -147,28 +171,6 @@ export async function getUserDetail(id) {
 export async function updateUser(id, payload) {
   const { data } = await api.put(`/users/${id}`, payload);
   return data;
-}
-
-export async function updateUserTradeMode(userId, newMode) {
-  if (!['neutral', 'win', 'lose'].includes(newMode)) {
-    throw new Error("Invalid trade mode. Must be 'neutral', 'win', or 'lose'.");
-  }
-
-  const { data, error } = await supabase
-    .from("profiles")
-    .update({ trade_mode: newMode })
-    .eq("id", userId)
-    .select()
-    .single();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return {
-    success: true,
-    tradeMode: data.trade_mode
-  };
 }
 
 export async function suspendUser(id) {
@@ -221,7 +223,21 @@ export async function updateUserAsset(
   type = "adjustment",
   description = ""
 ) {
-  const column = coin.toUpperCase();
+  const column = coin.toLowerCase();
+
+  const allowedColumns = [
+    "btc",
+    "eth",
+    "bnb",
+    "sol",
+    "xrp",
+    "usdt",
+    "usdc",
+  ];
+
+  if (!allowedColumns.includes(column)) {
+    throw new Error(`Unsupported asset: ${coin}`);
+  }
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
@@ -239,14 +255,18 @@ export async function updateUserAsset(
 
   const { error: updateError } = await supabase
     .from("profiles")
-    .update({ [column]: after })
+    .update({
+      [column]: after,
+    })
     .eq("id", userId);
 
   if (updateError) {
     throw new Error(updateError.message);
   }
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const { error: historyError } = await supabase
     .from("admin_balance_history")
@@ -265,14 +285,20 @@ export async function updateUserAsset(
     throw new Error(historyError.message);
   }
 
-  return { success: true };
+  return {
+    success: true,
+  };
 }
 
 /* ============================================================
    WALLETS
 ============================================================ */
 
-export async function updateUserWalletAddress(userId, network, address) {
+export async function updateUserWalletAddress(
+  userId,
+  network,
+  address
+) {
   const NETWORK_MAP = {
     bitcoin: "BTC",
     erc20: "ETH",
@@ -286,7 +312,9 @@ export async function updateUserWalletAddress(userId, network, address) {
     tron: "TRX",
   };
 
-  const coin = NETWORK_MAP[network] || network.toUpperCase();
+  const coin =
+    NETWORK_MAP[network] ||
+    network.toUpperCase();
 
   const { data: existing, error: findError } = await supabase
     .from("wallet_addresses")
@@ -302,7 +330,9 @@ export async function updateUserWalletAddress(userId, network, address) {
   if (existing) {
     const { error } = await supabase
       .from("wallet_addresses")
-      .update({ address })
+      .update({
+        address,
+      })
       .eq("id", existing.id);
 
     if (error) {
@@ -325,7 +355,9 @@ export async function updateUserWalletAddress(userId, network, address) {
     }
   }
 
-  return { success: true };
+  return {
+    success: true,
+  };
 }
 
 /* ============================================================
@@ -338,7 +370,9 @@ export async function approveUserKyc(id) {
 }
 
 export async function denyUserKyc(id, reason) {
-  const { data } = await api.post(`/users/${id}/kyc/deny`, { reason });
+  const { data } = await api.post(`/users/${id}/kyc/deny`, {
+    reason,
+  });
   return data;
 }
 
@@ -352,7 +386,9 @@ export async function approveUserBinding(id) {
 }
 
 export async function denyUserBinding(id, reason) {
-  const { data } = await api.post(`/users/${id}/binding/deny`, { reason });
+  const { data } = await api.post(`/users/${id}/binding/deny`, {
+    reason,
+  });
   return data;
 }
 
@@ -361,7 +397,9 @@ export async function denyUserBinding(id, reason) {
 ============================================================ */
 
 export async function addAdminNote(id, note) {
-  const { data } = await api.post(`/users/${id}/notes`, { note });
+  const { data } = await api.post(`/users/${id}/notes`, {
+    note,
+  });
   return data;
 }
 
@@ -369,7 +407,15 @@ export async function addAdminNote(id, note) {
    USER ACTIVITY
 ============================================================ */
 
-export async function getUserActivity(id, params = {}) {
-  const { data } = await api.get(`/users/${id}/activity`, { params });
+export async function getUserActivity(
+  id,
+  params = {}
+) {
+  const { data } = await api.get(
+    `/users/${id}/activity`,
+    {
+      params,
+    }
+  );
   return data;
 }
