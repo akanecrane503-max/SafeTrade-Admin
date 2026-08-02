@@ -17,21 +17,20 @@ export default function AssetsTab({ user, onRefetch }) {
   const [loading, setLoading] = useState(true);
   const { addToast } = useToast();
 
-  // --- FETCH REAL BALANCES USING THE EXISTING USER SERVICE ---
+  // --- FETCH REAL BALANCES (Triggered whenever the user object changes) ---
   useEffect(() => {
     async function fetchRealBalances() {
       if (!user?.id) return;
       setLoading(true);
       
       try {
+        // Fetch the absolute latest data directly from the database
         const freshUserData = await userService.getUserById(user.id);
 
         if (freshUserData) {
           // Map the data to match your UI
           const realAssets = SUPPORTED_ASSETS.map((coin) => {
-            // Lookup the balance directly using the COIN NAME as the key (Uppercase to match DB)
             const balance = Number(freshUserData[coin] || 0);
-            
             return {
               coin: coin,
               balance: balance,
@@ -42,14 +41,14 @@ export default function AssetsTab({ user, onRefetch }) {
         }
       } catch (err) {
         console.error("Failed to fetch assets:", err);
-        addToast("Could not load user assets.", 'error');
+        // Do NOT show an error toast here to avoid spamming the admin
       } finally {
         setLoading(false);
       }
     }
 
     fetchRealBalances();
-  }, [user?.id]);
+  }, [user?.id]); // Triggers whenever the user ID changes or is re-fetched
 
   function openEdit(asset) {
     setEditingAsset(asset);
@@ -60,11 +59,11 @@ export default function AssetsTab({ user, onRefetch }) {
     e.preventDefault();
     setSaving(true);
     try {
-      // Pass the exact uppercase coin name to the service
       await userService.updateUserAsset(user.id, editingAsset.coin, Number(value));
       addToast(`${editingAsset.coin} balance updated`, 'success');
       setEditingAsset(null);
       
+      // Force the Admin Panel to instantly refresh the table
       if (onRefetch) {
         await onRefetch();
       }
