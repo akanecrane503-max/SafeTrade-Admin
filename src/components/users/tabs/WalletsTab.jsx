@@ -41,7 +41,8 @@ export default function WalletsTab({ user, onRefetch }) {
       );
       addToast(`${editingWallet.label} updated`, "success");
       setEditingWallet(null);
-      // Force the Admin Panel to instantly refresh the wallets
+      
+      // CRITICAL FIX: Force the parent to reload the user data so the wallet list updates
       if (onRefetch) {
         await onRefetch();
       }
@@ -60,6 +61,7 @@ export default function WalletsTab({ user, onRefetch }) {
 
       <div className="space-y-3">
         {NETWORKS.map((wallet) => {
+          // This pulls the real address from the fresh user data
           const value = user.wallets?.[wallet.network] || "";
           return (
             <div
