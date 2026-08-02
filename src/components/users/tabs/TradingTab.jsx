@@ -1,16 +1,28 @@
 import { useState, useEffect } from 'react';
-import { Power, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
-import { supabase } from '../../../lib/supabase'; // Import supabase directly
+import { Power, TrendingUp, TrendingDown, Loader2, CheckCircle2, XCircle, CircleDashed } from 'lucide-react';
+import { supabase } from '../../../lib/supabase'; 
 import ConfirmDialog from '../../common/ConfirmDialog.jsx';
 import { useToast } from '../../common/Toast.jsx';
 import * as tradingService from '../../../services/tradingService';
 import * as tradeService from '../../../services/tradeService'; 
 import { cn } from '../../../utils/helpers';
+import Dropdown from '../../common/Dropdown.jsx'; // Import your common Dropdown
+
+// Dropdown options for the Auto-Win/Lose feature
+const MODE_OPTIONS = [
+  { label: 'Neutral (Standard market)', value: 'neutral' },
+  { label: '⚡ FORCE AUTO-WIN', value: 'win' },
+  { label: '💀 FORCE AUTO-LOSE', value: 'lose' },
+];
 
 export default function TradingTab({ user, onRefetch }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const { addToast } = useToast();
+
+  // Trade Mode State
+  const [tradeMode, setTradeMode] = useState('neutral');
+  const [updatingMode, setUpdatingMode] = useState(false);
 
   const [openTrades, setOpenTrades] = useState([]);
   const [tradesLoading, setTradesLoading] = useState(true);
@@ -22,37 +34,71 @@ export default function TradingTab({ user, onRefetch }) {
 
   const enabled = Boolean(user.tradingEnabled);
 
-  // 1. DIRECT SUPABASE QUERY TO FETCH TRADES
+  // 1. FETCH USER DATA & TRADES
   useEffect(() => {
-    async function loadUserTrades() {
+    async function loadUserData() {
       if (!user?.id) return;
       setTradesLoading(true);
       try {
-        // We query Supabase directly here to avoid any column name mismatches
+        // Load trades
         const { data, error } = await supabase
           .from("trade_history")
           .select("*")
-          .eq("user_id", user.id) // Querying by the user's ID
+          .eq("user_id", user.id)
           .eq("status", "open");
-
         if (error) throw error;
         setOpenTrades(data || []);
+
+        // Load the user's current Trade Mode from the database
+        const { data: profileData, error: profileError } = await supabase
+          .from("profiles")
+          .select("trade_mode")
+          .eq("id", user.id)
+          .single();
+          
+        if (!profileError && profileData) {
+          setTradeMode(profileData.trade_mode || 'neutral');
+        }
       } catch (err) {
-        console.error("Failed to load user trades", err);
-        addToast("Could not load trades. Check if 'user_id' column exists in trade_history.", 'error');
+        console.error("Failed to load data", err);
+        addToast("Could not load user data", 'error');
       } finally {
         setTradesLoading(false);
       }
     }
-    loadUserTrades();
+    loadUserData();
   }, [user?.id]);
 
-  // 2. Toggle Trading Status
+  // 2. HANDLE AUTO WIN / LOSE MODE CHANGE
+  async function handleModeChange(newMode) {
+    if (newMode === tradeMode) return;
+    setUpdatingMode(true);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ trade_mode: newMode })
+        .eq("id", user.id);
+
+      if (error) throw error;
+      
+      setTradeMode(newMode);
+      addToast(`Trade mode updated to ${newMode.toUpperCase()}`, 'success');
+      onRefetch?.(); // Refresh parent just in case
+    } catch (err) {
+      addToast(err.message || 'Failed to update trade mode', 'error');
+      // Revert dropdown on error
+      setTradeMode(tradeMode); 
+    } finally {
+      setUpdatingMode(false);
+    }
+  }
+
+  // 3. TOGGLE TRADING STATUS
   async function handleToggle() {
     setLoading(true);
     try {
       await tradingService.toggleUserTrading(user.id, !enabled);
-      addToast(`Trading ${!enabled ? 'enabled' : 'disabled'} for this user`, 'success');
+      addToast(`Trading ${!enabled ? 'enabled' : 'disabled'}`, 'success');
       setConfirmOpen(false);
       onRefetch?.();
     } catch (err) {
@@ -62,7 +108,7 @@ export default function TradingTab({ user, onRefetch }) {
     }
   }
 
-  // 3. Force Settle Trade
+  // 4. FORCE SETTLE INDIVIDUAL TRADE
   function openSettleConfirmation(trade, outcome) {
     setSettlingTrade(trade);
     setSettlingOutcome(outcome);
@@ -74,7 +120,7 @@ export default function TradingTab({ user, onRefetch }) {
     setSettlingLoading(true);
     try {
       await tradeService.adminForceSettleTrade(settlingTrade.id, settlingOutcome);
-      addToast(`Trade ${settlingTrade.id.slice(0,8)} forced to ${settlingOutcome.toUpperCase()}!`, 'success');
+      addToast(`Trade forced to ${settlingOutcome.toUpperCase()}!`, 'success');
       setOpenTrades((prev) => prev.filter(t => t.id !== settlingTrade.id));
       setConfirmSettleOpen(false);
     } catch (err) {
@@ -88,9 +134,11 @@ export default function TradingTab({ user, onRefetch }) {
 
   return (
     <div className="space-y-6">
+      
       {/* --- TRADING STATUS CARD --- */}
       <div className="card p-5">
         <h3 className="text-sm font-semibold text-slate-200 mb-5">Trading Status</h3>
+
         <div className="flex items-center justify-between p-4 rounded-xl bg-slate-800/40">
           <div className="flex items-center gap-3">
             <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', enabled ? 'bg-emerald-500/10' : 'bg-red-500/10')}>
@@ -113,7 +161,47 @@ export default function TradingTab({ user, onRefetch }) {
         </div>
       </div>
 
-      {/* --- FORCE WIN / LOSE SECTION --- */}
+      {/* --- NEW: AUTO WIN / LOSE OVERRIDE CARD --- */}
+      <div className="card p-5">
+        <h3 className="text-sm font-semibold text-slate-200 mb-5">Trade Outcome Override</h3>
+        
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-800/40">
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              'w-10 h-10 rounded-xl flex items-center justify-center',
+              tradeMode === 'win' ? 'bg-emerald-500/20' : 
+              tradeMode === 'lose' ? 'bg-red-500/20' : 'bg-slate-600/20'
+            )}>
+              {tradeMode === 'win' && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
+              {tradeMode === 'lose' && <XCircle className="w-5 h-5 text-red-400" />}
+              {tradeMode === 'neutral' && <CircleDashed className="w-5 h-5 text-slate-400" />}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-200">
+                {tradeMode === 'win' && 'Auto-Win Mode (ACTIVE)'}
+                {tradeMode === 'lose' && 'Auto-Lose Mode (ACTIVE)'}
+                {tradeMode === 'neutral' && 'Neutral Mode'}
+              </p>
+              <p className="text-xs text-slate-500">
+                {tradeMode === 'win' && '⚠️ This user will WIN every single trade they place.'}
+                {tradeMode === 'lose' && '⚠️ This user will LOSE every single trade they place.'}
+                {tradeMode === 'neutral' && 'Trades will resolve normally based on market conditions.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="min-w-[160px]">
+            <Dropdown 
+              options={MODE_OPTIONS}
+              value={tradeMode}
+              onChange={handleModeChange}
+              disabled={updatingMode}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* --- ACTIVE TRADES LIST --- */}
       <div className="card p-5">
         <h3 className="text-sm font-semibold text-slate-200 mb-5">
           Active Trades <span className="text-xs font-normal text-slate-500 ml-2">({openTrades.length})</span>
@@ -133,7 +221,6 @@ export default function TradingTab({ user, onRefetch }) {
               const isLong = trade.direction === 'Long';
               return (
                 <div key={trade.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-800/40 border border-slate-700/50 hover:border-slate-600/50 transition-colors">
-                  
                   <div className="flex items-center gap-4">
                     <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', isLong ? 'bg-emerald-500/10' : 'bg-rose-500/10')}>
                       {isLong ? <TrendingUp className="w-4 h-4 text-emerald-400" /> : <TrendingDown className="w-4 h-4 text-rose-400" />}
@@ -145,7 +232,6 @@ export default function TradingTab({ user, onRefetch }) {
                       </p>
                     </div>
                   </div>
-
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => openSettleConfirmation(trade, 'win')}
@@ -185,7 +271,7 @@ export default function TradingTab({ user, onRefetch }) {
         onConfirm={handleForceSettle}
         loading={settlingLoading}
         title={`Force ${settlingOutcome === 'win' ? 'WIN' : 'LOSE'} this trade?`}
-        message={`This will immediately settle the ${settlingTrade?.symbol || ''} trade as a ${settlingOutcome === 'win' ? 'WIN (User receives profit)' : 'LOSE (User loses stake)'}. This action cannot be undone.`}
+        message={`This will immediately settle the ${settlingTrade?.symbol || ''} trade. This action cannot be undone.`}
         confirmLabel={`Force ${settlingOutcome === 'win' ? 'Win' : 'Lose'}`}
         variant={settlingOutcome === 'win' ? 'primary' : 'danger'}
       />
