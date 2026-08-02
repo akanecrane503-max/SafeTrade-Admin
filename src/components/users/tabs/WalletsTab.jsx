@@ -6,56 +6,16 @@ import * as userService from "../../../services/userService";
 import { truncateAddress } from "../../../utils/formatters";
 
 const NETWORKS = [
-  {
-    coin: "BTC",
-    network: "bitcoin",
-    label: "Bitcoin",
-  },
-  {
-    coin: "ETH",
-    network: "erc20",
-    label: "Ethereum (ERC20)",
-  },
-  {
-    coin: "USDT",
-    network: "trc20",
-    label: "USDT (TRC20)",
-  },
-  {
-    coin: "USDT",
-    network: "bep20",
-    label: "USDT (BEP20)",
-  },
-  {
-    coin: "USDT",
-    network: "erc20-usdt",
-    label: "USDT (ERC20)",
-  },
-  {
-    coin: "SOL",
-    network: "solana",
-    label: "Solana",
-  },
-  {
-    coin: "XRP",
-    network: "xrpl",
-    label: "Ripple (XRP)",
-  },
-  {
-    coin: "DOGE",
-    network: "dogecoin",
-    label: "Dogecoin",
-  },
-  {
-    coin: "ADA",
-    network: "cardano",
-    label: "Cardano",
-  },
-  {
-    coin: "TRX",
-    network: "tron",
-    label: "TRON",
-  },
+  { coin: "BTC", network: "bitcoin", label: "Bitcoin" },
+  { coin: "ETH", network: "erc20", label: "Ethereum (ERC20)" },
+  { coin: "USDT", network: "trc20", label: "USDT (TRC20)" },
+  { coin: "USDT", network: "bep20", label: "USDT (BEP20)" },
+  { coin: "USDT", network: "erc20-usdt", label: "USDT (ERC20)" },
+  { coin: "SOL", network: "solana", label: "Solana" },
+  { coin: "XRP", network: "xrpl", label: "Ripple (XRP)" },
+  { coin: "DOGE", network: "dogecoin", label: "Dogecoin" },
+  { coin: "ADA", network: "cardano", label: "Cardano" },
+  { coin: "TRX", network: "tron", label: "TRON" },
 ];
 
 export default function WalletsTab({ user, onRefetch }) {
@@ -81,7 +41,10 @@ export default function WalletsTab({ user, onRefetch }) {
       );
       addToast(`${editingWallet.label} updated`, "success");
       setEditingWallet(null);
-      onRefetch?.();
+      // Force the Admin Panel to instantly refresh the wallets
+      if (onRefetch) {
+        await onRefetch();
+      }
     } catch (err) {
       addToast(err.message || "Unable to save wallet", "error");
     } finally {
