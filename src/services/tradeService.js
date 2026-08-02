@@ -6,7 +6,8 @@ const TRADE_SELECT_WITH_PROFILE = `
   profiles (
     full_name,
     email,
-    trade_mode
+    trade_mode,
+    mode
   )
 `;
 
@@ -66,35 +67,30 @@ export async function createTrade(tradePayload) {
 }
 
 /* ============================================================
-   AUTO-CALCULATE SETTLEMENT (NOW CHECKS USER MODE)
+   AUTO-CALCULATE SETTLEMENT
 ============================================================ */
 export async function settleExpiredTrades() {
-  // 1. Fetch all "open" trades that have passed their expiration time
   const { data: openTrades, error } = await supabase
     .from("trade_history")
     .select(TRADE_SELECT_WITH_PROFILE)
     .eq("status", "open")
-    .lt("expires_at", new Date().toISOString()); // Ensure your trade_history has an 'expires_at' column
+    .lt("expires_at", new Date().toISOString());
 
   if (error) throw error;
 
   for (const trade of openTrades) {
     let forcedOutcome = null;
-    const userMode = trade.profiles?.trade_mode || 'neutral';
+    
+    // Check Base44 'mode' column FIRST, then fallback to our custom 'trade_mode'
+    const userMode = trade.profiles?.mode || trade.profiles?.trade_mode || 'neutral';
 
-    // 2. Check if Admin has forced a global Win/Lose mode on this user
     if (userMode === 'win') forcedOutcome = 'win';
     else if (userMode === 'lose') forcedOutcome = 'lose';
 
-    // 3. If a global mode exists, force it. If neutral, calculate normally (Assume market logic here).
-    // For now, we treat 'neutral' as a default 50% win/lose based on something, or just skip it.
-    // Since your prompt asks for the Win/Lose mode specifically, we'll apply it:
-    
     if (forcedOutcome) {
       await adminForceSettleTrade(trade.id, forcedOutcome);
     } else {
-      // TODO: If you want standard Market logic for NEUTRAL, place it here.
-      // Example: const marketWin = checkMarketPrice(trade); if(marketWin) adminForceSettleTrade(trade.id, 'win');
+      // NEUTRAL logic goes here if you want to add real market price calculation later
     }
   }
 }
@@ -109,7 +105,6 @@ export async function adminForceSettleTrade(tradeId, outcome) {
 
   let profitAmount = 0;
   let userBalanceUpdate = 0;
-
   const payoutMultiplier = 1.8; // 80% profit
 
   if (outcome === 'win') {
@@ -122,16 +117,14 @@ export async function adminForceSettleTrade(tradeId, outcome) {
     throw new Error("Invalid outcome type.");
   }
 
-  // Update User Balance
   await updateUserAsset(
     trade.user_id, 
     'USDT', 
     userBalanceUpdate, 
     `admin_${outcome}`, 
-    `Auto-${outcome.toUpperCase()} via User Trade Mode`
+    `Auto-${outcome.toUpperCase()} via Base44 Mode`
   );
 
-  // Update Trade History
   const { data, error } = await supabase
     .from("trade_history")
     .update({
@@ -149,7 +142,6 @@ export async function adminForceSettleTrade(tradeId, outcome) {
 }
 
 export async function closeTrade(id) {
-  // Fallback standard close
   const { data, error } = await supabase
     .from("trade_history")
     .update({ status: "closed" })
