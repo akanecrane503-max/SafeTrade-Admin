@@ -1,21 +1,63 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Pencil, Coins } from 'lucide-react';
 import Modal from '../../common/Modal.jsx';
 import EmptyState from '../../common/EmptyState.jsx';
 import { useToast } from '../../common/Toast.jsx';
+import { supabase } from '../../../lib/supabase'; // Import Supabase directly
 import * as userService from '../../../services/userService';
 import { formatCrypto, formatCurrency } from '../../../utils/formatters';
-import { ASSET_LIST } from '../../../utils/constants';
+
+// The static list of coins the platform supports
+const SUPPORTED_ASSETS = ['BTC', 'ETH', 'SOL', 'XRP', 'BNB', 'USDT', 'USDC'];
 
 export default function AssetsTab({ user, onRefetch }) {
   const [editingAsset, setEditingAsset] = useState(null);
   const [value, setValue] = useState('');
   const [saving, setSaving] = useState(false);
+  const [assets, setAssets] = useState([]);
+  const [loading, setLoading] = useState(true);
   const { addToast } = useToast();
 
-  const assets = user.assets?.length
-    ? user.assets
-    : ASSET_LIST.map((coin) => ({ coin, balance: 0, usdValue: 0 }));
+  // --- FETCH REAL BALANCES FROM SUPABASE DIRECTLY ---
+  useEffect(() => {
+    async function fetchRealBalances() {
+      if (!user?.id) return;
+      setLoading(true);
+      
+      try {
+        // Query the profiles table for all coin balances
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('btc, eth, sol, xrp, bnb, usdt, usdc')
+          .eq('id', user.id)
+          .single();
+
+        if (error) throw error;
+
+        if (data) {
+          // Map the database columns (lowercase) to the UI list (uppercase)
+          const realAssets = SUPPORTED_ASSETS.map((coin) => {
+            const columnName = coin.toLowerCase();
+            const balance = Number(data[columnName] || 0);
+            
+            return {
+              coin: coin,
+              balance: balance,
+              usdValue: 0, // You can calculate this later if you have live prices
+            };
+          });
+          setAssets(realAssets);
+        }
+      } catch (err) {
+        console.error("Failed to fetch assets:", err);
+        addToast("Could not load user assets", 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchRealBalances();
+  }, [user?.id]);
 
   function openEdit(asset) {
     setEditingAsset(asset);
@@ -30,7 +72,7 @@ export default function AssetsTab({ user, onRefetch }) {
       addToast(`${editingAsset.coin} balance updated`, 'success');
       setEditingAsset(null);
       
-      // FORCE REFETCH
+      // Force the parent to refetch the user data
       if (onRefetch) {
         await onRefetch();
       }
@@ -39,6 +81,19 @@ export default function AssetsTab({ user, onRefetch }) {
     } finally {
       setSaving(false);
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="card p-5">
+        <h3 className="text-sm font-semibold text-slate-200 mb-5">Assets</h3>
+        <div className="space-y-2">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="h-10 bg-slate-800/40 rounded-lg animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
