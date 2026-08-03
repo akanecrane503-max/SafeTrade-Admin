@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { CheckCircle2, X } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import StatisticsGrid from '../components/dashboard/StatisticsGrid.jsx';
 import ActivityChart from '../components/dashboard/ActivityChart.jsx';
@@ -13,6 +15,10 @@ import * as adminService from '../services/adminService';
 
 export default function Dashboard() {
   const [range, setRange] = useState('7d');
+  const location = useLocation();
+  const [showApprovedBanner, setShowApprovedBanner] = useState(
+    Boolean(location.state?.justApproved)
+  );
 
   const { data: stats, loading: statsLoading } = useApi(
     () => dashboardService.getDashboardStats(),
@@ -45,6 +51,24 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {showApprovedBanner && (
+        <div className="flex items-start gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl px-4 py-3.5">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-emerald-300">You're approved!</p>
+            <p className="text-sm text-emerald-400/80 mt-0.5">
+              Welcome to the admin panel — you can now access your dashboard.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowApprovedBanner(false)}
+            className="text-emerald-400/60 hover:text-emerald-300 transition-colors shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       <div>
         <h1 className="text-2xl font-bold text-white">Dashboard</h1>
         <p className="text-sm text-slate-500 mt-1">
@@ -58,18 +82,3 @@ export default function Dashboard() {
         data={activityData}
         loading={activityLoading}
         range={range}
-        onRangeChange={setRange}
-      />
-
-      <QuickActions />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <RecentTrades trades={trades} loading={tradesLoading} />
-        <RecentUsers users={users} loading={usersLoading} />
-        <RecentDeposits deposits={deposits} loading={depositsLoading} />
-        <RecentWithdrawals withdrawals={withdrawals} loading={withdrawalsLoading} />
-        <RecentAdminActivity logs={adminLogs?.items} loading={adminLogsLoading} />
-      </div>
-    </div>
-  );
-}
