@@ -36,13 +36,13 @@ export default function AppRoutes() {
           <Route path={ROUTES.WALLETS} element={<Wallets />} />
           <Route path={ROUTES.TRADES} element={<Trades />} />
           <Route path={ROUTES.ANNOUNCEMENTS} element={<Announcements />} />
-          <Route path={ROUTES.REPORTS} element={<Reports />} />
-          <Route path={ROUTES.SETTINGS} element={<Settings />} />
           <Route element={<ProtectedRoute requireRole="main_admin" />}>
+            <Route path={ROUTES.REPORTS} element={<Reports />} />
+            <Route path={ROUTES.SETTINGS} element={<Settings />} />
             <Route path={ROUTES.ADMIN_MANAGEMENT} element={<AdminManagement />} />
+            <Route path={ROUTES.ACTIVITY_LOG} element={<ActivityLog />} />
+            <Route path={ROUTES.SYSTEM_CONTROL} element={<SystemControl />} />
           </Route>
-          <Route path={ROUTES.ACTIVITY_LOG} element={<ActivityLog />} />
-          <Route path={ROUTES.SYSTEM_CONTROL} element={<SystemControl />} />
         </Route>
       </Route>
       <Route path="*" element={<NotFound />} />
