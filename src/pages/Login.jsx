@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { ShieldCheck, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, Eye, EyeOff, AlertCircle, Clock } from 'lucide-react';
 import { useAdminAuth } from '../context/AdminAuthContext.jsx';
 import { ROUTES } from '../utils/constants';
 
@@ -8,16 +8,16 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const { signIn, signingIn, error } = useAdminAuth();
+  const { signIn, signingIn, error, errorType } = useAdminAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   async function handleSubmit(e) {
     e.preventDefault();
     try {
-      await signIn(email, password);
+      const result = await signIn(email, password);
       const redirectTo = location.state?.from?.pathname || ROUTES.DASHBOARD;
-      navigate(redirectTo, { replace: true });
+      navigate(redirectTo, { replace: true, state: { justApproved: result.justApproved } });
     } catch {
       // error state is already handled by useAdminAuth
     }
@@ -42,7 +42,13 @@ export default function Login() {
 
         <div className="card p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
+            {error && errorType === 'pending' && (
+              <div className="flex items-start gap-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2.5">
+                <Clock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-sm text-amber-300">{error}</p>
+              </div>
+            )}
+            {error && errorType !== 'pending' && (
               <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2.5">
                 <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
                 <p className="text-sm text-red-400">{error}</p>
