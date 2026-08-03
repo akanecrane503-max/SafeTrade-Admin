@@ -8,6 +8,7 @@ export function AdminAuthProvider({ children }) {
   const [sessionLoading, setSessionLoading] = useState(true);
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState('');
+  const [errorType, setErrorType] = useState('error'); // 'error' | 'pending'
 
   const loadAdminForSession = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -35,6 +36,7 @@ export function AdminAuthProvider({ children }) {
 
   const signIn = useCallback(async (email, password) => {
     setError('');
+    setErrorType('error');
     setSigningIn(true);
     try {
       const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
@@ -52,16 +54,21 @@ export function AdminAuthProvider({ children }) {
       }
       if (adminRow.status === 'pending') {
         await supabase.auth.signOut();
-        throw new Error('Your admin account is still pending approval.');
+        setErrorType('pending');
+        throw new Error("Your account is awaiting approval from a main admin. You'll be able to sign in once it's approved.");
       }
       if (adminRow.status !== 'active') {
         await supabase.auth.signOut();
         throw new Error('Your admin account has been suspended.');
       }
 
+      // last_login is still null only on the very first successful sign-in —
+      // i.e., this is their first login right after being approved.
+      const justApproved = !adminRow.last_login;
+
       await supabase.rpc('touch_admin_last_login');
       setAdminUser(adminRow);
-      return adminRow;
+      return { ...adminRow, justApproved };
     } catch (err) {
       setError(err.message || 'Sign in failed');
       throw err;
@@ -75,7 +82,7 @@ export function AdminAuthProvider({ children }) {
     setAdminUser(null);
   }, []);
 
-  const value = { adminUser, sessionLoading, signingIn, error, signIn, signOut };
+  const value = { adminUser, sessionLoading, signingIn, error, errorType, signIn, signOut };
   return <AdminAuthContext.Provider value={value}>{children}</AdminAuthContext.Provider>;
 }
 
