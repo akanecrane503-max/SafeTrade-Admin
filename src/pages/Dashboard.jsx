@@ -82,3 +82,19 @@ export default function Dashboard() {
         data={activityData}
         loading={activityLoading}
         range={range}
+        onRangeChange={setRange}
+      />
+
+      <QuickActions />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <RecentUsers users={users} loading={usersLoading} />
+        <RecentTrades trades={trades} loading={tradesLoading} />
+        <RecentDeposits deposits={deposits} loading={depositsLoading} />
+        <RecentWithdrawals withdrawals={withdrawals} loading={withdrawalsLoading} />
+      </div>
+
+      <RecentAdminActivity logs={adminLogs} loading={adminLogsLoading} />
+    </div>
+  );
+}
