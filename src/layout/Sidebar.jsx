@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { ROUTES } from '../utils/constants';
 import { cn } from '../utils/helpers';
+import { useAdminAuth } from '../context/AdminAuthContext.jsx';
 
 const NAV_ITEMS = [
   { label: 'Dashboard', icon: LayoutDashboard, path: ROUTES.DASHBOARD },
@@ -27,14 +28,20 @@ const NAV_ITEMS = [
   { label: 'Wallets', icon: Wallet, path: ROUTES.WALLETS },
   { label: 'Trades', icon: LineChart, path: ROUTES.TRADES },
   { label: 'Announcements', icon: Megaphone, path: ROUTES.ANNOUNCEMENTS },
-  { label: 'Reports', icon: FileBarChart, path: ROUTES.REPORTS },
-  { label: 'Admin Management', icon: UserCog, path: ROUTES.ADMIN_MANAGEMENT },
-  { label: 'Activity Log', icon: ClipboardList, path: ROUTES.ACTIVITY_LOG },
-  { label: 'System Control', icon: SlidersHorizontal, path: ROUTES.SYSTEM_CONTROL },
-  { label: 'Settings', icon: Settings, path: ROUTES.SETTINGS },
+  { label: 'Reports', icon: FileBarChart, path: ROUTES.REPORTS, requireRole: 'main_admin' },
+  { label: 'Admin Management', icon: UserCog, path: ROUTES.ADMIN_MANAGEMENT, requireRole: 'main_admin' },
+  { label: 'Activity Log', icon: ClipboardList, path: ROUTES.ACTIVITY_LOG, requireRole: 'main_admin' },
+  { label: 'System Control', icon: SlidersHorizontal, path: ROUTES.SYSTEM_CONTROL, requireRole: 'main_admin' },
+  { label: 'Settings', icon: Settings, path: ROUTES.SETTINGS, requireRole: 'main_admin' },
 ];
 
 export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
+  const { adminUser } = useAdminAuth();
+
+  const visibleNavItems = NAV_ITEMS.filter(
+    (item) => !item.requireRole || adminUser?.role === item.requireRole
+  );
+
   return (
     <>
       {mobileOpen && (
@@ -65,7 +72,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          {NAV_ITEMS.map(({ label, icon: Icon, path }) => (
+          {visibleNavItems.map(({ label, icon: Icon, path }) => (
             <NavLink
               key={path}
               to={path}
