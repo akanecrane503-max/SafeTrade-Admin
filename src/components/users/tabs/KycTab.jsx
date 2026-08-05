@@ -5,7 +5,7 @@ import StatusBadge from '../../common/StatusBadge.jsx';
 import { useToast } from '../../common/Toast.jsx';
 import { supabase } from '../../../lib/supabase';
 
-// ─── kyc-documents ───
+// ─── BUCKET NAME ───
 const BUCKET_NAME = 'kyc-documents';
 
 export default function KycTab({ user, onRefetch }) {
@@ -36,7 +36,6 @@ export default function KycTab({ user, onRefetch }) {
       if (data) {
         const urls = {};
         
-        // Check each URL field
         const fields = {
           idFront: data.id_front_url,
           idBack: data.id_back_url,
@@ -49,10 +48,14 @@ export default function KycTab({ user, onRefetch }) {
             if (value.startsWith('http')) {
               urls[key] = value;
             } else {
-              // Otherwise, construct the public URL
+              // Construct the full path with bucket name
+              // The value is like: userId/filename.png
+              const fullPath = value;
+              
+              // Get public URL from Supabase Storage
               const { data: publicData } = supabase.storage
                 .from(BUCKET_NAME)
-                .getPublicUrl(value);
+                .getPublicUrl(fullPath);
               
               urls[key] = publicData?.publicUrl || null;
             }
@@ -206,20 +209,33 @@ export default function KycTab({ user, onRefetch }) {
 function PhotoCard({ label, url, filePath }) {
   const [imgError, setImgError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [displayUrl, setDisplayUrl] = useState(url);
+  const [displayUrl, setDisplayUrl] = useState(null);
 
-  // If URL is null, try to construct it from filePath
   useEffect(() => {
-    if (!url && filePath) {
+    // If we have a URL, use it
+    if (url) {
+      setDisplayUrl(url);
+      return;
+    }
+
+    // If we have a filePath but no URL, construct it
+    if (filePath) {
       const { data } = supabase.storage
         .from(BUCKET_NAME)
         .getPublicUrl(filePath);
       setDisplayUrl(data?.publicUrl || null);
     } else {
-      setDisplayUrl(url);
+      setDisplayUrl(null);
     }
   }, [url, filePath]);
 
+  // Reset states when URL changes
+  useEffect(() => {
+    setImgError(false);
+    setIsLoading(true);
+  }, [displayUrl]);
+
+  // Show no image state
   if (!displayUrl && !filePath) {
     return (
       <div>
@@ -232,7 +248,7 @@ function PhotoCard({ label, url, filePath }) {
     );
   }
 
-  // If we have a filePath but no URL, show that we're loading
+  // Show loading state
   if (!displayUrl && filePath) {
     return (
       <div>
@@ -273,21 +289,14 @@ function PhotoCard({ label, url, filePath }) {
           <div className="absolute inset-0 flex flex-col items-center justify-center text-xs text-slate-600 gap-2 bg-slate-900">
             <span className="text-2xl">⚠️</span>
             <span>Failed to load</span>
-            {displayUrl && (
-              <a 
-                href={displayUrl} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 text-xs underline"
-              >
-                Open directly
-              </a>
-            )}
-            {filePath && (
-              <span className="text-[10px] text-slate-700 break-all max-w-[90%] mt-1">
-                Path: {filePath}
-              </span>
-            )}
+            <a 
+              href={displayUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-blue-400 hover:text-blue-300 text-xs underline"
+            >
+              Open directly
+            </a>
           </div>
         )}
       </div>
