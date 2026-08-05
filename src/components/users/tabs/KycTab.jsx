@@ -32,7 +32,6 @@ export default function KycTab({ user, onRefetch }) {
       if (!active) return;
       setSubmission(data);
 
-      // ─── GENERATE SIGNED URLS ───
       if (data) {
         const urls = {};
         
@@ -45,24 +44,24 @@ export default function KycTab({ user, onRefetch }) {
         for (const [key, value] of Object.entries(fields)) {
           if (value) {
             try {
-              // If it's already a full URL, use it
               if (value.startsWith('http')) {
                 urls[key] = value;
               } else {
-                // Create a signed URL (works for private buckets too)
+                // Try signed URL
                 const { data: signedData, error } = await supabase.storage
                   .from(BUCKET_NAME)
-                  .createSignedUrl(value, 3600); // 1 hour expiry
+                  .createSignedUrl(value, 3600);
                 
-                if (error) {
-                  console.error(`Error creating signed URL for ${key}:`, error);
+                if (error || !signedData?.signedUrl) {
                   // Fallback to public URL
                   const { data: publicData } = supabase.storage
                     .from(BUCKET_NAME)
                     .getPublicUrl(value);
                   urls[key] = publicData?.publicUrl || null;
+                  console.log(`[${key}] Public URL:`, urls[key]);
                 } else {
-                  urls[key] = signedData?.signedUrl || null;
+                  urls[key] = signedData.signedUrl;
+                  console.log(`[${key}] Signed URL:`, urls[key]);
                 }
               }
             } catch (err) {
@@ -74,6 +73,7 @@ export default function KycTab({ user, onRefetch }) {
           }
         }
         
+        console.log('All photo URLs:', urls);
         setPhotoUrls(urls);
       }
       
@@ -215,43 +215,49 @@ export default function KycTab({ user, onRefetch }) {
   );
 }
 
-// ─── PHOTO CARD COMPONENT ───
+// ─── PHOTO CARD COMPONENT WITH DEBUG ───
 function PhotoCard({ label, url, filePath }) {
   const [imgError, setImgError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [displayUrl, setDisplayUrl] = useState(null);
+  const [debugInfo, setDebugInfo] = useState('');
 
   useEffect(() => {
     async function getImageUrl() {
-      // If we have a URL, use it
       if (url) {
         setDisplayUrl(url);
+        setDebugInfo('Using provided URL');
         return;
       }
 
-      // If we have a filePath but no URL, try signed URL
       if (filePath) {
         try {
+          setDebugInfo(`Attempting: ${filePath}`);
+          
+          // Try signed URL first
           const { data, error } = await supabase.storage
             .from(BUCKET_NAME)
             .createSignedUrl(filePath, 3600);
           
           if (error) {
-            console.error('Signed URL error:', error);
+            setDebugInfo(`Signed URL error: ${error.message}`);
             // Fallback to public URL
             const { data: publicData } = supabase.storage
               .from(BUCKET_NAME)
               .getPublicUrl(filePath);
             setDisplayUrl(publicData?.publicUrl || null);
+            setDebugInfo(`Fallback to public URL`);
           } else {
             setDisplayUrl(data?.signedUrl || null);
+            setDebugInfo(`Signed URL created`);
           }
         } catch (err) {
-          console.error('Error getting image URL:', err);
+          setDebugInfo(`Error: ${err.message}`);
           setDisplayUrl(null);
         }
       } else {
         setDisplayUrl(null);
+        setDebugInfo('No file path');
       }
     }
 
@@ -264,7 +270,6 @@ function PhotoCard({ label, url, filePath }) {
     setIsLoading(true);
   }, [displayUrl]);
 
-  // Show no image state
   if (!displayUrl && !filePath) {
     return (
       <div>
@@ -277,7 +282,6 @@ function PhotoCard({ label, url, filePath }) {
     );
   }
 
-  // Show loading state
   if (!displayUrl && filePath) {
     return (
       <div>
@@ -285,6 +289,7 @@ function PhotoCard({ label, url, filePath }) {
         <div className="w-full aspect-[4/3] rounded-lg border border-slate-800 bg-slate-900 flex flex-col items-center justify-center text-xs text-slate-600 gap-2">
           <div className="w-8 h-8 border-2 border-slate-600 border-t-blue-500 rounded-full animate-spin"></div>
           <span>Loading image...</span>
+          <span className="text-[9px] text-slate-700 break-all text-center px-2">{debugInfo}</span>
         </div>
       </div>
     );
@@ -308,28 +313,35 @@ function PhotoCard({ label, url, filePath }) {
             className={`w-full h-full object-cover transition-opacity duration-300 ${
               isLoading ? 'opacity-0' : 'opacity-100'
             }`}
-            onLoad={() => setIsLoading(false)}
-            onError={() => {
+            onLoad={() => {
+              setIsLoading(false);
+              console.log(`✅ ${label} loaded successfully`);
+            }}
+            onError={(e) => {
               setIsLoading(false);
               setImgError(true);
+              console.error(`❌ ${label} failed to load:`, e);
+              console.log('URL that failed:', displayUrl);
             }}
           />
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-xs text-slate-600 gap-2 bg-slate-900">
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-xs text-slate-600 gap-2 bg-slate-900 p-2 text-center">
             <span className="text-2xl">⚠️</span>
             <span>Failed to load</span>
+            <span className="text-[9px] text-slate-700 break-all">{debugInfo}</span>
             {displayUrl && (
               <a 
                 href={displayUrl} 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-blue-400 hover:text-blue-300 text-xs underline"
+                onClick={() => console.log('Opening URL:', displayUrl)}
               >
                 Open directly
               </a>
             )}
             {filePath && (
-              <span className="text-[10px] text-slate-700 break-all max-w-[90%] mt-1">
+              <span className="text-[8px] text-slate-800 break-all max-w-[90%] mt-1">
                 File: {filePath.split('/').pop()}
               </span>
             )}
