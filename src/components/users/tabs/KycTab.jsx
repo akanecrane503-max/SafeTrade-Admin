@@ -5,6 +5,9 @@ import StatusBadge from '../../common/StatusBadge.jsx';
 import { useToast } from '../../common/Toast.jsx';
 import { supabase } from '../../../lib/supabase';
 
+// ─── BUCKET NAME - UPDATE THIS TO MATCH YOUR BUCKET ───
+const BUCKET_NAME = 'kyc-documents'; // Change this to your actual bucket name
+
 export default function KycTab({ user, onRefetch }) {
   const [confirmType, setConfirmType] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -109,15 +112,18 @@ export default function KycTab({ user, onRefetch }) {
       <div className="grid grid-cols-3 gap-3 mb-5">
         <PhotoCard 
           label="ID Front" 
-          url={submission.id_front_url}
+          filePath={submission.id_front_url}
+          bucketName={BUCKET_NAME}
         />
         <PhotoCard 
           label="ID Back" 
-          url={submission.id_back_url}
+          filePath={submission.id_back_url}
+          bucketName={BUCKET_NAME}
         />
         <PhotoCard 
           label="Handheld" 
-          url={submission.handheld_photo_url}
+          filePath={submission.handheld_photo_url}
+          bucketName={BUCKET_NAME}
         />
       </div>
 
@@ -163,54 +169,74 @@ export default function KycTab({ user, onRefetch }) {
 }
 
 // ─── PHOTO CARD COMPONENT ───
-function PhotoCard({ label, url }) {
+function PhotoCard({ label, filePath, bucketName }) {
   const [imgError, setImgError] = useState(false);
   const [finalUrl, setFinalUrl] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    if (!url) {
+    if (!filePath) {
       setFinalUrl(null);
       return;
     }
 
     async function getImageUrl() {
       try {
-        // If URL is already a full URL, use it
-        if (url.startsWith('http')) {
-          setFinalUrl(url);
+        // If filePath is already a full URL, use it directly
+        if (filePath.startsWith('http')) {
+          setFinalUrl(filePath);
           return;
         }
 
-        // If it's a file path, construct the public URL
-        const bucketName = 'kyc-documents';
-        const { data } = supabase.storage
+        // Try to get public URL from Supabase Storage
+        const { data, error } = await supabase.storage
           .from(bucketName)
-          .getPublicUrl(url);
-        
-        setFinalUrl(data?.publicUrl || url);
+          .createSignedUrl(filePath, 3600);
+
+        if (error) {
+          // If signed URL fails, try public URL
+          console.warn('Signed URL failed, trying public URL:', error);
+          const { data: publicData } = supabase.storage
+            .from(bucketName)
+            .getPublicUrl(filePath);
+          
+          if (publicData?.publicUrl) {
+            setFinalUrl(publicData.publicUrl);
+          } else {
+            setErrorMessage('Could not generate image URL');
+            setFinalUrl(null);
+          }
+        } else {
+          setFinalUrl(data?.signedUrl);
+        }
       } catch (err) {
         console.error('Error getting image URL:', err);
-        setFinalUrl(url);
+        setErrorMessage(err.message || 'Failed to load image');
+        setFinalUrl(null);
       }
     }
 
     getImageUrl();
-  }, [url]);
+  }, [filePath, bucketName]);
 
   // Reset states when URL changes
   useEffect(() => {
     setImgError(false);
     setIsLoading(true);
+    setErrorMessage('');
   }, [finalUrl]);
 
   if (!finalUrl) {
     return (
       <div>
         <label className="text-xs font-medium text-slate-500 block mb-1.5">{label}</label>
-        <div className="w-full aspect-[4/3] rounded-lg border border-slate-800 bg-slate-900 flex flex-col items-center justify-center text-xs text-slate-600 gap-2">
+        <div className="w-full aspect-[4/3] rounded-lg border border-slate-800 bg-slate-900 flex flex-col items-center justify-center text-xs text-slate-600 gap-2 p-4 text-center">
           <span className="text-2xl">📷</span>
-          <span>No image</span>
+          <span>{errorMessage || 'No image available'}</span>
+          {filePath && (
+            <span className="text-[10px] text-slate-700 break-all">{filePath}</span>
+          )}
         </div>
       </div>
     );
@@ -221,7 +247,7 @@ function PhotoCard({ label, url }) {
       <label className="text-xs font-medium text-slate-500 block mb-1.5">{label}</label>
       <div className="w-full aspect-[4/3] rounded-lg border border-slate-800 bg-slate-900 overflow-hidden relative">
         {isLoading && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-xs text-slate-600 gap-2 bg-slate-900/80">
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-xs text-slate-600 gap-2 bg-slate-900/80 z-10">
             <div className="w-8 h-8 border-2 border-slate-600 border-t-blue-500 rounded-full animate-spin"></div>
             <span>Loading...</span>
           </div>
