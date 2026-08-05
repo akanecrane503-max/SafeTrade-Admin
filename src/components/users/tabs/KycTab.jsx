@@ -32,7 +32,7 @@ export default function KycTab({ user, onRefetch }) {
       if (!active) return;
       setSubmission(data);
 
-      // ─── GENERATE PUBLIC URLS ───
+      // ─── GENERATE SIGNED URLS ───
       if (data) {
         const urls = {};
         
@@ -44,20 +44,30 @@ export default function KycTab({ user, onRefetch }) {
 
         for (const [key, value] of Object.entries(fields)) {
           if (value) {
-            // If it's already a full URL, use it
-            if (value.startsWith('http')) {
-              urls[key] = value;
-            } else {
-              // Construct the full path with bucket name
-              // The value is like: userId/filename.png
-              const fullPath = value;
-              
-              // Get public URL from Supabase Storage
-              const { data: publicData } = supabase.storage
-                .from(BUCKET_NAME)
-                .getPublicUrl(fullPath);
-              
-              urls[key] = publicData?.publicUrl || null;
+            try {
+              // If it's already a full URL, use it
+              if (value.startsWith('http')) {
+                urls[key] = value;
+              } else {
+                // Create a signed URL (works for private buckets too)
+                const { data: signedData, error } = await supabase.storage
+                  .from(BUCKET_NAME)
+                  .createSignedUrl(value, 3600); // 1 hour expiry
+                
+                if (error) {
+                  console.error(`Error creating signed URL for ${key}:`, error);
+                  // Fallback to public URL
+                  const { data: publicData } = supabase.storage
+                    .from(BUCKET_NAME)
+                    .getPublicUrl(value);
+                  urls[key] = publicData?.publicUrl || null;
+                } else {
+                  urls[key] = signedData?.signedUrl || null;
+                }
+              }
+            } catch (err) {
+              console.error(`Failed to get URL for ${key}:`, err);
+              urls[key] = null;
             }
           } else {
             urls[key] = null;
@@ -212,21 +222,40 @@ function PhotoCard({ label, url, filePath }) {
   const [displayUrl, setDisplayUrl] = useState(null);
 
   useEffect(() => {
-    // If we have a URL, use it
-    if (url) {
-      setDisplayUrl(url);
-      return;
+    async function getImageUrl() {
+      // If we have a URL, use it
+      if (url) {
+        setDisplayUrl(url);
+        return;
+      }
+
+      // If we have a filePath but no URL, try signed URL
+      if (filePath) {
+        try {
+          const { data, error } = await supabase.storage
+            .from(BUCKET_NAME)
+            .createSignedUrl(filePath, 3600);
+          
+          if (error) {
+            console.error('Signed URL error:', error);
+            // Fallback to public URL
+            const { data: publicData } = supabase.storage
+              .from(BUCKET_NAME)
+              .getPublicUrl(filePath);
+            setDisplayUrl(publicData?.publicUrl || null);
+          } else {
+            setDisplayUrl(data?.signedUrl || null);
+          }
+        } catch (err) {
+          console.error('Error getting image URL:', err);
+          setDisplayUrl(null);
+        }
+      } else {
+        setDisplayUrl(null);
+      }
     }
 
-    // If we have a filePath but no URL, construct it
-    if (filePath) {
-      const { data } = supabase.storage
-        .from(BUCKET_NAME)
-        .getPublicUrl(filePath);
-      setDisplayUrl(data?.publicUrl || null);
-    } else {
-      setDisplayUrl(null);
-    }
+    getImageUrl();
   }, [url, filePath]);
 
   // Reset states when URL changes
@@ -289,14 +318,21 @@ function PhotoCard({ label, url, filePath }) {
           <div className="absolute inset-0 flex flex-col items-center justify-center text-xs text-slate-600 gap-2 bg-slate-900">
             <span className="text-2xl">⚠️</span>
             <span>Failed to load</span>
-            <a 
-              href={displayUrl} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-blue-400 hover:text-blue-300 text-xs underline"
-            >
-              Open directly
-            </a>
+            {displayUrl && (
+              <a 
+                href={displayUrl} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:text-blue-300 text-xs underline"
+              >
+                Open directly
+              </a>
+            )}
+            {filePath && (
+              <span className="text-[10px] text-slate-700 break-all max-w-[90%] mt-1">
+                File: {filePath.split('/').pop()}
+              </span>
+            )}
           </div>
         )}
       </div>
