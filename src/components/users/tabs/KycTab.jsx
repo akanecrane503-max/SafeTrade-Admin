@@ -5,13 +5,14 @@ import StatusBadge from '../../common/StatusBadge.jsx';
 import { useToast } from '../../common/Toast.jsx';
 import { supabase } from '../../../lib/supabase';
 
-// ─── BUCKET NAME - UPDATE THIS TO MATCH YOUR BUCKET ───
-const BUCKET_NAME = 'kyc-documents'; // Change this to your actual bucket name
+// ─── kyc-documents ───
+const BUCKET_NAME = 'kyc-documents';
 
 export default function KycTab({ user, onRefetch }) {
   const [confirmType, setConfirmType] = useState(null);
   const [loading, setLoading] = useState(false);
   const [submission, setSubmission] = useState(null);
+  const [photoUrls, setPhotoUrls] = useState({});
   const [loadingSubmission, setLoadingSubmission] = useState(true);
   const { addToast } = useToast();
 
@@ -30,6 +31,39 @@ export default function KycTab({ user, onRefetch }) {
 
       if (!active) return;
       setSubmission(data);
+
+      // ─── GENERATE PUBLIC URLS ───
+      if (data) {
+        const urls = {};
+        
+        // Check each URL field
+        const fields = {
+          idFront: data.id_front_url,
+          idBack: data.id_back_url,
+          handheld: data.handheld_photo_url
+        };
+
+        for (const [key, value] of Object.entries(fields)) {
+          if (value) {
+            // If it's already a full URL, use it
+            if (value.startsWith('http')) {
+              urls[key] = value;
+            } else {
+              // Otherwise, construct the public URL
+              const { data: publicData } = supabase.storage
+                .from(BUCKET_NAME)
+                .getPublicUrl(value);
+              
+              urls[key] = publicData?.publicUrl || null;
+            }
+          } else {
+            urls[key] = null;
+          }
+        }
+        
+        setPhotoUrls(urls);
+      }
+      
       setLoadingSubmission(false);
     }
 
@@ -112,18 +146,18 @@ export default function KycTab({ user, onRefetch }) {
       <div className="grid grid-cols-3 gap-3 mb-5">
         <PhotoCard 
           label="ID Front" 
+          url={photoUrls.idFront}
           filePath={submission.id_front_url}
-          bucketName={BUCKET_NAME}
         />
         <PhotoCard 
           label="ID Back" 
+          url={photoUrls.idBack}
           filePath={submission.id_back_url}
-          bucketName={BUCKET_NAME}
         />
         <PhotoCard 
           label="Handheld" 
+          url={photoUrls.handheld}
           filePath={submission.handheld_photo_url}
-          bucketName={BUCKET_NAME}
         />
       </div>
 
@@ -169,74 +203,43 @@ export default function KycTab({ user, onRefetch }) {
 }
 
 // ─── PHOTO CARD COMPONENT ───
-function PhotoCard({ label, filePath, bucketName }) {
+function PhotoCard({ label, url, filePath }) {
   const [imgError, setImgError] = useState(false);
-  const [finalUrl, setFinalUrl] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [displayUrl, setDisplayUrl] = useState(url);
 
+  // If URL is null, try to construct it from filePath
   useEffect(() => {
-    if (!filePath) {
-      setFinalUrl(null);
-      return;
+    if (!url && filePath) {
+      const { data } = supabase.storage
+        .from(BUCKET_NAME)
+        .getPublicUrl(filePath);
+      setDisplayUrl(data?.publicUrl || null);
+    } else {
+      setDisplayUrl(url);
     }
+  }, [url, filePath]);
 
-    async function getImageUrl() {
-      try {
-        // If filePath is already a full URL, use it directly
-        if (filePath.startsWith('http')) {
-          setFinalUrl(filePath);
-          return;
-        }
-
-        // Try to get public URL from Supabase Storage
-        const { data, error } = await supabase.storage
-          .from(bucketName)
-          .createSignedUrl(filePath, 3600);
-
-        if (error) {
-          // If signed URL fails, try public URL
-          console.warn('Signed URL failed, trying public URL:', error);
-          const { data: publicData } = supabase.storage
-            .from(bucketName)
-            .getPublicUrl(filePath);
-          
-          if (publicData?.publicUrl) {
-            setFinalUrl(publicData.publicUrl);
-          } else {
-            setErrorMessage('Could not generate image URL');
-            setFinalUrl(null);
-          }
-        } else {
-          setFinalUrl(data?.signedUrl);
-        }
-      } catch (err) {
-        console.error('Error getting image URL:', err);
-        setErrorMessage(err.message || 'Failed to load image');
-        setFinalUrl(null);
-      }
-    }
-
-    getImageUrl();
-  }, [filePath, bucketName]);
-
-  // Reset states when URL changes
-  useEffect(() => {
-    setImgError(false);
-    setIsLoading(true);
-    setErrorMessage('');
-  }, [finalUrl]);
-
-  if (!finalUrl) {
+  if (!displayUrl && !filePath) {
     return (
       <div>
         <label className="text-xs font-medium text-slate-500 block mb-1.5">{label}</label>
-        <div className="w-full aspect-[4/3] rounded-lg border border-slate-800 bg-slate-900 flex flex-col items-center justify-center text-xs text-slate-600 gap-2 p-4 text-center">
+        <div className="w-full aspect-[4/3] rounded-lg border border-slate-800 bg-slate-900 flex flex-col items-center justify-center text-xs text-slate-600 gap-2">
           <span className="text-2xl">📷</span>
-          <span>{errorMessage || 'No image available'}</span>
-          {filePath && (
-            <span className="text-[10px] text-slate-700 break-all">{filePath}</span>
-          )}
+          <span>No image</span>
+        </div>
+      </div>
+    );
+  }
+
+  // If we have a filePath but no URL, show that we're loading
+  if (!displayUrl && filePath) {
+    return (
+      <div>
+        <label className="text-xs font-medium text-slate-500 block mb-1.5">{label}</label>
+        <div className="w-full aspect-[4/3] rounded-lg border border-slate-800 bg-slate-900 flex flex-col items-center justify-center text-xs text-slate-600 gap-2">
+          <div className="w-8 h-8 border-2 border-slate-600 border-t-blue-500 rounded-full animate-spin"></div>
+          <span>Loading image...</span>
         </div>
       </div>
     );
@@ -255,7 +258,7 @@ function PhotoCard({ label, filePath, bucketName }) {
         
         {!imgError ? (
           <img
-            src={finalUrl}
+            src={displayUrl}
             alt={label}
             className={`w-full h-full object-cover transition-opacity duration-300 ${
               isLoading ? 'opacity-0' : 'opacity-100'
@@ -270,14 +273,21 @@ function PhotoCard({ label, filePath, bucketName }) {
           <div className="absolute inset-0 flex flex-col items-center justify-center text-xs text-slate-600 gap-2 bg-slate-900">
             <span className="text-2xl">⚠️</span>
             <span>Failed to load</span>
-            <a 
-              href={finalUrl} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-blue-400 hover:text-blue-300 text-xs underline"
-            >
-              Open directly
-            </a>
+            {displayUrl && (
+              <a 
+                href={displayUrl} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:text-blue-300 text-xs underline"
+              >
+                Open directly
+              </a>
+            )}
+            {filePath && (
+              <span className="text-[10px] text-slate-700 break-all max-w-[90%] mt-1">
+                Path: {filePath}
+              </span>
+            )}
           </div>
         )}
       </div>
