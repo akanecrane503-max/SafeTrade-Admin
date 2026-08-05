@@ -84,6 +84,7 @@ export default function AdminManagement() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState(null);
   const [confirmAdmin, setConfirmAdmin] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const { addToast } = useToast();
@@ -156,6 +157,21 @@ export default function AdminManagement() {
     }
   }
 
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    setSaving(true);
+    try {
+      await adminService.deleteAdmin(deleteTarget.id);
+      addToast('Administrator removed', 'success');
+      setDeleteTarget(null);
+      refetch();
+    } catch (err) {
+      addToast(err.message || 'Failed to remove administrator', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleApproveRequest(id) {
     try {
       await adminService.approvePendingAdmin(id);
@@ -217,6 +233,7 @@ export default function AdminManagement() {
         loading={loading}
         onEdit={openEdit}
         onToggle={setConfirmAdmin}
+        onDelete={setDeleteTarget}
       />
 
       {!loading && totalItems > 0 && (
@@ -250,6 +267,17 @@ export default function AdminManagement() {
         }
         confirmLabel={confirmAdmin?.status === 'active' ? 'Suspend' : 'Activate'}
         variant={confirmAdmin?.status === 'active' ? 'danger' : 'primary'}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleConfirmDelete}
+        loading={saving}
+        title="Remove this administrator?"
+        message="This permanently deletes their admin account. They will need to request access again to regain entry."
+        confirmLabel="Remove"
+        variant="danger"
       />
     </div>
   );
