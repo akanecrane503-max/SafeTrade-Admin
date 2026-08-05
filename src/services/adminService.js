@@ -121,6 +121,24 @@ export async function rejectPendingAdmin(id) {
   return data;
 }
 
+export async function deleteAdmin(id) {
+  const { data: target, error: fetchError } = await supabase
+    .from('admins')
+    .select('full_name, email, role')
+    .eq('id', id)
+    .single();
+  if (fetchError) throw new Error(fetchError.message);
+
+  if (target.role === 'main_admin') {
+    throw new Error("Main Admin accounts can't be removed.");
+  }
+
+  const { error } = await supabase.from('admins').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+
+  await logAdminActivity('Removed administrator', target.full_name || target.email);
+}
+
 export async function getActivityLog({ limit = 20 } = {}) {
   const { data, error } = await supabase
     .from('admin_activity_log')
