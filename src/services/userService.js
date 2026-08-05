@@ -96,6 +96,11 @@ export async function getUserById(id) {
 
     tradeMode: data.trade_mode || "neutral",
 
+    phoneNumber: data.phone_number || "",
+    phoneVerificationStatus: data.phone_verification_status || "not_linked",
+    verificationEmail: data.verification_email || "",
+    emailVerificationStatus: data.email_verification_status || "not_linked",
+
     createdAt: data.created_at,
     lastLogin: data.last_login,
     isOnline: data.is_online,
@@ -407,19 +412,59 @@ export async function denyUserKyc(id, reason) {
 }
 
 /* ============================================================
-   ACCOUNT BINDING
+   PHONE / EMAIL VERIFICATION (admin approve / deny)
 ============================================================ */
 
-export async function approveUserBinding(id) {
-  const { data } = await api.post(`/users/${id}/binding/approve`);
-  return data;
+export async function approveUserPhoneVerification(id) {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ phone_verification_status: "approved" })
+    .eq("id", id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return { success: true };
 }
 
-export async function denyUserBinding(id, reason) {
-  const { data } = await api.post(`/users/${id}/binding/deny`, {
-    reason,
-  });
-  return data;
+export async function denyUserPhoneVerification(id) {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ phone_verification_status: "not_linked" })
+    .eq("id", id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return { success: true };
+}
+
+export async function approveUserEmailVerification(id) {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ email_verification_status: "approved" })
+    .eq("id", id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return { success: true };
+}
+
+export async function denyUserEmailVerification(id) {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ email_verification_status: "not_linked" })
+    .eq("id", id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return { success: true };
 }
 
 /* ============================================================
