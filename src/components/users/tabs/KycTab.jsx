@@ -1,24 +1,81 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BadgeCheck, X } from 'lucide-react';
 import ConfirmDialog from '../../common/ConfirmDialog.jsx';
 import StatusBadge from '../../common/StatusBadge.jsx';
 import { useToast } from '../../common/Toast.jsx';
-import * as userService from '../../../services/userService';
+import { supabase } from '../../../lib/supabase';
 
 export default function KycTab({ user, onRefetch }) {
   const [confirmType, setConfirmType] = useState(null); // 'approve' | 'deny'
   const [loading, setLoading] = useState(false);
+  const [submission, setSubmission] = useState(null);
+  const [photoUrls, setPhotoUrls] = useState({});
+  const [loadingSubmission, setLoadingSubmission] = useState(true);
   const { addToast } = useToast();
 
-  const status = user.kycStatus || 'pending';
+  useEffect(() => {
+    let active = true;
+
+    async function loadSubmission() {
+      setLoadingSubmission(true);
+      const { data } = await supabase
+        .from('kyc_submissions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('submitted_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!active) return;
+      setSubmission(data);
+
+      if (data) {
+        const paths = {
+          idFront: data.id_front_url,
+          idBack: data.id_back_url,
+          handheld: data.handheld_photo_url,
+        };
+        const signed = {};
+        for (const [key, url] of Object.entries(paths)) {
+          // Stored value is a full public URL from earlier upload; extract the
+          // storage path portion for signing.
+          const path = url.split('/kyc-documents/')[1];
+          if (path) {
+            const { data: signedData } = await supabase.storage
+              .from('kyc-documents')
+              .createSignedUrl(path, 3600);
+            signed[key] = signedData?.signedUrl;
+          }
+        }
+        if (active) setPhotoUrls(signed);
+      }
+      setLoadingSubmission(false);
+    }
+
+    loadSubmission();
+    return () => {
+      active = false;
+    };
+  }, [user.id]);
+
+  const status = submission?.status || 'not_submitted';
 
   async function handleConfirm() {
     setLoading(true);
     try {
-      if (confirmType === 'approve') await userService.approveUserKyc(user.id);
-      if (confirmType === 'deny') await userService.denyUserKyc(user.id);
+      const { error } = await supabase
+        .from('kyc_submissions')
+        .update({
+          status: confirmType === 'approve' ? 'approved' : 'denied',
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', submission.id);
+
+      if (error) throw new Error(error.message);
+
       addToast(`KYC ${confirmType === 'approve' ? 'approved' : 'denied'}`, 'success');
       setConfirmType(null);
+      setSubmission((prev) => ({ ...prev, status: confirmType === 'approve' ? 'approved' : 'denied' }));
       onRefetch?.();
     } catch (err) {
       addToast(err.message || 'Action failed', 'error');
@@ -27,11 +84,54 @@ export default function KycTab({ user, onRefetch }) {
     }
   }
 
+  if (loadingSubmission) {
+    return (
+      <div className="card p-5">
+        <p className="text-sm text-slate-500">Loading KYC submission...</p>
+      </div>
+    );
+  }
+
+  if (!submission) {
+    return (
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-sm font-semibold text-slate-200">KYC Verification</h3>
+          <StatusBadge status="not_submitted" />
+        </div>
+        <p className="text-sm text-slate-500">This user hasn't submitted KYC documents yet.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="card p-5">
       <div className="flex items-center justify-between mb-5">
         <h3 className="text-sm font-semibold text-slate-200">KYC Verification</h3>
         <StatusBadge status={status} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-5 text-sm">
+        <div>
+          <label className="text-xs font-medium text-slate-500 block mb-1">Full Name</label>
+          <p className="text-slate-200">{submission.full_name}</p>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-slate-500 block mb-1">Document Type</label>
+          <p className="text-slate-200 capitalize">{submission.document_type}</p>
+        </div>
+        {submission.id_number && (
+          <div className="col-span-2">
+            <label className="text-xs font-medium text-slate-500 block mb-1">ID / Passport Number</label>
+            <p className="text-slate-200 font-mono">{submission.id_number}</p>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <PhotoCard label="ID Front" url={photoUrls.idFront} />
+        <PhotoCard label="ID Back" url={photoUrls.idBack} />
+        <PhotoCard label="Handheld" url={photoUrls.handheld} />
       </div>
 
       {status === 'pending' ? (
@@ -71,6 +171,27 @@ export default function KycTab({ user, onRefetch }) {
         confirmLabel={confirmType === 'approve' ? 'Approve' : 'Deny'}
         variant={confirmType === 'approve' ? 'primary' : 'danger'}
       />
+    </div>
+  );
+}
+
+function PhotoCard({ label, url }) {
+  return (
+    <div>
+      <label className="text-xs font-medium text-slate-500 block mb-1.5">{label}</label>
+      {url ? (
+        <a href={url} target="_blank" rel="noopener noreferrer">
+          <img
+            src={url}
+            alt={label}
+            className="w-full aspect-[4/3] object-cover rounded-lg border border-slate-800 hover:border-slate-600 transition-colors"
+          />
+        </a>
+      ) : (
+        <div className="w-full aspect-[4/3] rounded-lg border border-slate-800 bg-slate-900 flex items-center justify-center text-xs text-slate-600">
+          Loading...
+        </div>
+      )}
     </div>
   );
 }
