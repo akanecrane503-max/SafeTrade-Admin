@@ -36,17 +36,60 @@ export default function KycTab({ user, onRefetch }) {
           handheld: data.handheld_photo_url,
         };
         const signed = {};
+        
         for (const [key, url] of Object.entries(paths)) {
-          // Stored value is a full public URL from earlier upload; extract the
-          // storage path portion for signing.
-          const path = url.split('/kyc-documents/')[1];
+          if (!url) {
+            signed[key] = null;
+            continue;
+          }
+          
+          // Try to extract the storage path from the URL
+          let path = null;
+          
+          // Check if it's already a public URL from Supabase Storage
+          if (url.includes('/storage/v1/object/public/')) {
+            // Extract path after the bucket name
+            const parts = url.split('/kyc-documents/');
+            if (parts.length > 1) {
+              path = parts[1].split('?')[0]; // Remove query params
+            } else {
+              // Try alternative extraction
+              const match = url.match(/\/kyc-documents\/([^?]+)/);
+              if (match) path = match[1];
+            }
+          } else if (url.includes('supabase.co/storage/v1/object/sign/')) {
+            // If it's already a signed URL, use it directly
+            signed[key] = url;
+            continue;
+          } else if (url.startsWith('http')) {
+            // If it's a full URL, try to extract path from it
+            const match = url.match(/\/kyc-documents\/([^?]+)/);
+            if (match) path = match[1];
+          } else {
+            // If it's just a file name or relative path
+            path = url;
+          }
+
           if (path) {
-            const { data: signedData } = await supabase.storage
-              .from('kyc-documents')
-              .createSignedUrl(path, 3600);
-            signed[key] = signedData?.signedUrl;
+            try {
+              const { data: signedData } = await supabase.storage
+                .from('kyc-documents')
+                .createSignedUrl(path, 3600);
+              signed[key] = signedData?.signedUrl;
+            } catch (err) {
+              console.error('Failed to sign URL for', key, err);
+              // Fallback: try using public URL
+              const { data: publicData } = supabase.storage
+                .from('kyc-documents')
+                .getPublicUrl(path);
+              signed[key] = publicData?.publicUrl;
+            }
+          } else {
+            // If we can't extract the path, try using the URL directly
+            signed[key] = url;
           }
         }
+        
         if (active) setPhotoUrls(signed);
       }
       setLoadingSubmission(false);
@@ -176,22 +219,41 @@ export default function KycTab({ user, onRefetch }) {
 }
 
 function PhotoCard({ label, url }) {
-  return (
-    <div>
-      <label className="text-xs font-medium text-slate-500 block mb-1.5">{label}</label>
-      {url ? (
+  const [imgError, setImgError] = useState(false);
+
+  if (url && !imgError) {
+    return (
+      <div>
+        <label className="text-xs font-medium text-slate-500 block mb-1.5">{label}</label>
         <a href={url} target="_blank" rel="noopener noreferrer">
           <img
             src={url}
             alt={label}
             className="w-full aspect-[4/3] object-cover rounded-lg border border-slate-800 hover:border-slate-600 transition-colors"
+            onError={() => setImgError(true)}
           />
         </a>
-      ) : (
-        <div className="w-full aspect-[4/3] rounded-lg border border-slate-800 bg-slate-900 flex items-center justify-center text-xs text-slate-600">
-          Loading...
-        </div>
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <label className="text-xs font-medium text-slate-500 block mb-1.5">{label}</label>
+      <div className="w-full aspect-[4/3] rounded-lg border border-slate-800 bg-slate-900 flex flex-col items-center justify-center text-xs text-slate-600 gap-2">
+        <span className="text-2xl">📷</span>
+        <span>{url ? 'Failed to load image' : 'No image'}</span>
+        {url && (
+          <a 
+            href={url} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-blue-400 hover:text-blue-300 text-xs underline"
+          >
+            Open directly
+          </a>
+        )}
+      </div>
     </div>
   );
 }
