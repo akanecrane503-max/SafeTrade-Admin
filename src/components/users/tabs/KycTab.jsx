@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { BadgeCheck, X } from 'lucide-react';
+import { BadgeCheck, X, Eye, Download } from 'lucide-react';
 import ConfirmDialog from '../../common/ConfirmDialog.jsx';
 import StatusBadge from '../../common/StatusBadge.jsx';
 import { useToast } from '../../common/Toast.jsx';
 import { supabase } from '../../../lib/supabase';
 
 export default function KycTab({ user, onRefetch }) {
-  const [confirmType, setConfirmType] = useState(null); // 'approve' | 'deny'
+  const [confirmType, setConfirmType] = useState(null);
   const [loading, setLoading] = useState(false);
   const [submission, setSubmission] = useState(null);
   const [photoUrls, setPhotoUrls] = useState({});
@@ -30,67 +30,11 @@ export default function KycTab({ user, onRefetch }) {
       setSubmission(data);
 
       if (data) {
-        const paths = {
-          idFront: data.id_front_url,
-          idBack: data.id_back_url,
-          handheld: data.handheld_photo_url,
-        };
-        const signed = {};
-        
-        for (const [key, url] of Object.entries(paths)) {
-          if (!url) {
-            signed[key] = null;
-            continue;
-          }
-          
-          // Try to extract the storage path from the URL
-          let path = null;
-          
-          // Check if it's already a public URL from Supabase Storage
-          if (url.includes('/storage/v1/object/public/')) {
-            // Extract path after the bucket name
-            const parts = url.split('/kyc-documents/');
-            if (parts.length > 1) {
-              path = parts[1].split('?')[0]; // Remove query params
-            } else {
-              // Try alternative extraction
-              const match = url.match(/\/kyc-documents\/([^?]+)/);
-              if (match) path = match[1];
-            }
-          } else if (url.includes('supabase.co/storage/v1/object/sign/')) {
-            // If it's already a signed URL, use it directly
-            signed[key] = url;
-            continue;
-          } else if (url.startsWith('http')) {
-            // If it's a full URL, try to extract path from it
-            const match = url.match(/\/kyc-documents\/([^?]+)/);
-            if (match) path = match[1];
-          } else {
-            // If it's just a file name or relative path
-            path = url;
-          }
-
-          if (path) {
-            try {
-              const { data: signedData } = await supabase.storage
-                .from('kyc-documents')
-                .createSignedUrl(path, 3600);
-              signed[key] = signedData?.signedUrl;
-            } catch (err) {
-              console.error('Failed to sign URL for', key, err);
-              // Fallback: try using public URL
-              const { data: publicData } = supabase.storage
-                .from('kyc-documents')
-                .getPublicUrl(path);
-              signed[key] = publicData?.publicUrl;
-            }
-          } else {
-            // If we can't extract the path, try using the URL directly
-            signed[key] = url;
-          }
+        // Get signed URLs for all photos
+        const urls = await getSignedUrls(data);
+        if (active) {
+          setPhotoUrls(urls);
         }
-        
-        if (active) setPhotoUrls(signed);
       }
       setLoadingSubmission(false);
     }
@@ -100,6 +44,74 @@ export default function KycTab({ user, onRefetch }) {
       active = false;
     };
   }, [user.id]);
+
+  // ─── FUNCTION TO GET SIGNED URLS ───
+  async function getSignedUrls(data) {
+    const result = {
+      idFront: null,
+      idBack: null,
+      handheld: null,
+    };
+
+    const filePaths = {
+      idFront: data.id_front_url,
+      idBack: data.id_back_url,
+      handheld: data.handheld_photo_url,
+    };
+
+    for (const [key, value] of Object.entries(filePaths)) {
+      if (!value) continue;
+      
+      try {
+        // Extract the file path from the URL
+        let filePath = value;
+        
+        // If it's a full URL, extract the path part
+        if (value.includes('/kyc-documents/')) {
+          const match = value.match(/\/kyc-documents\/([^?]+)/);
+          if (match) {
+            filePath = match[1];
+          } else {
+            // Try splitting by the bucket name
+            const parts = value.split('/kyc-documents/');
+            if (parts.length > 1) {
+              filePath = parts[1].split('?')[0];
+            }
+          }
+        }
+
+        // If it's still a full URL, try to get the filename from the end
+        if (filePath.includes('http')) {
+          const fileName = filePath.split('/').pop().split('?')[0];
+          if (fileName) {
+            filePath = fileName;
+          }
+        }
+
+        // Create signed URL
+        const { data: signedData, error } = await supabase.storage
+          .from('kyc-documents')
+          .createSignedUrl(filePath, 3600);
+
+        if (error) {
+          console.error(`Error signing ${key}:`, error);
+          // Try public URL as fallback
+          const { data: publicData } = supabase.storage
+            .from('kyc-documents')
+            .getPublicUrl(filePath);
+          result[key] = publicData?.publicUrl || value;
+        } else {
+          result[key] = signedData?.signedUrl || value;
+        }
+      } catch (err) {
+        console.error(`Failed to get URL for ${key}:`, err);
+        // Fallback: use the original URL
+        result[key] = value;
+      }
+    }
+
+    return result;
+  }
 
   const status = submission?.status || 'not_submitted';
 
@@ -172,9 +184,21 @@ export default function KycTab({ user, onRefetch }) {
       </div>
 
       <div className="grid grid-cols-3 gap-3 mb-5">
-        <PhotoCard label="ID Front" url={photoUrls.idFront} />
-        <PhotoCard label="ID Back" url={photoUrls.idBack} />
-        <PhotoCard label="Handheld" url={photoUrls.handheld} />
+        <PhotoCard 
+          label="ID Front" 
+          url={photoUrls.idFront} 
+          filePath={submission.id_front_url}
+        />
+        <PhotoCard 
+          label="ID Back" 
+          url={photoUrls.idBack}
+          filePath={submission.id_back_url}
+        />
+        <PhotoCard 
+          label="Handheld" 
+          url={photoUrls.handheld}
+          filePath={submission.handheld_photo_url}
+        />
       </div>
 
       {status === 'pending' ? (
@@ -218,40 +242,76 @@ export default function KycTab({ user, onRefetch }) {
   );
 }
 
-function PhotoCard({ label, url }) {
+// ─── PHOTO CARD COMPONENT ───
+function PhotoCard({ label, url, filePath }) {
   const [imgError, setImgError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  if (url && !imgError) {
+  // Reset loading state when URL changes
+  useEffect(() => {
+    setImgError(false);
+    setIsLoading(true);
+  }, [url]);
+
+  const handleImageLoad = () => {
+    setIsLoading(false);
+  };
+
+  const handleImageError = () => {
+    setIsLoading(false);
+    setImgError(true);
+  };
+
+  // If no URL or filePath, show empty state
+  if (!url && !filePath) {
     return (
       <div>
         <label className="text-xs font-medium text-slate-500 block mb-1.5">{label}</label>
-        <a href={url} target="_blank" rel="noopener noreferrer">
-          <img
-            src={url}
-            alt={label}
-            className="w-full aspect-[4/3] object-cover rounded-lg border border-slate-800 hover:border-slate-600 transition-colors"
-            onError={() => setImgError(true)}
-          />
-        </a>
+        <div className="w-full aspect-[4/3] rounded-lg border border-slate-800 bg-slate-900 flex flex-col items-center justify-center text-xs text-slate-600 gap-2">
+          <span className="text-2xl">📷</span>
+          <span>No image</span>
+        </div>
       </div>
     );
   }
 
+  // Show loading or image
   return (
     <div>
       <label className="text-xs font-medium text-slate-500 block mb-1.5">{label}</label>
-      <div className="w-full aspect-[4/3] rounded-lg border border-slate-800 bg-slate-900 flex flex-col items-center justify-center text-xs text-slate-600 gap-2">
-        <span className="text-2xl">📷</span>
-        <span>{url ? 'Failed to load image' : 'No image'}</span>
-        {url && (
-          <a 
-            href={url} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-blue-400 hover:text-blue-300 text-xs underline"
-          >
-            Open directly
-          </a>
+      <div className="relative w-full aspect-[4/3] rounded-lg border border-slate-800 bg-slate-900 overflow-hidden">
+        {isLoading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-xs text-slate-600 gap-2">
+            <div className="w-8 h-8 border-2 border-slate-600 border-t-blue-500 rounded-full animate-spin"></div>
+            <span>Loading...</span>
+          </div>
+        )}
+        
+        {!imgError && url ? (
+          <img
+            src={url}
+            alt={label}
+            className={`w-full h-full object-cover transition-opacity duration-300 ${
+              isLoading ? 'opacity-0' : 'opacity-100'
+            }`}
+            onLoad={handleImageLoad}
+            onError={handleImageError}
+          />
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-xs text-slate-600 gap-2">
+            <span className="text-2xl">⚠️</span>
+            <span>Failed to load</span>
+            {filePath && (
+              <a 
+                href={filePath} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:text-blue-300 text-xs underline"
+              >
+                Open directly
+              </a>
+            )}
+          </div>
         )}
       </div>
     </div>
