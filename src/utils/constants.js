@@ -15,6 +15,7 @@ export const ROUTES = {
   ADMIN_MANAGEMENT: '/admins',
   ACTIVITY_LOG: '/activity-log',
   SYSTEM_CONTROL: '/system-control',
+  CUSTOMER_SERVICE: '/customer-service',
 };
 
 export function userDetailPath(id) {
