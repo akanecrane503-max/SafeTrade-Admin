@@ -12,6 +12,7 @@ const AUDIENCE_OPTIONS = [
   { label: 'All users', value: 'all_users' },
   { label: 'Verified users', value: 'verified_users' },
   { label: 'Admins only', value: 'admins_only' },
+  { label: 'Specific UID', value: 'specific_uid' },
 ];
 
 const emptyForm = {
@@ -19,6 +20,7 @@ const emptyForm = {
   body: '',
   priority: 'normal',
   audience: 'all_users',
+  targetUid: '',
   published: false,
 };
 
@@ -32,6 +34,7 @@ export default function AnnouncementEditor({ open, onClose, announcement, onSave
         body: announcement.body || '',
         priority: announcement.priority || 'normal',
         audience: announcement.audience || 'all_users',
+        targetUid: announcement.targetUid || '',
         published: Boolean(announcement.published),
       });
     } else {
@@ -70,7 +73,6 @@ export default function AnnouncementEditor({ open, onClose, announcement, onSave
             className="input-base w-full"
           />
         </div>
-
         <div>
           <label className="block text-xs font-medium text-slate-400 mb-2">Body</label>
           <textarea
@@ -81,7 +83,6 @@ export default function AnnouncementEditor({ open, onClose, announcement, onSave
             className="input-base w-full resize-none"
           />
         </div>
-
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-slate-400 mb-2">Priority</label>
@@ -100,7 +101,18 @@ export default function AnnouncementEditor({ open, onClose, announcement, onSave
             />
           </div>
         </div>
-
+        {form.audience === 'specific_uid' && (
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-2">Target UID</label>
+            <input
+              type="text"
+              value={form.targetUid}
+              onChange={(e) => setForm((f) => ({ ...f, targetUid: e.target.value }))}
+              placeholder="e.g. 600001"
+              className="input-base w-full"
+            />
+          </div>
+        )}
         <div className="flex items-center justify-between p-3 rounded-xl bg-slate-800/40">
           <span className="text-sm text-slate-300">Publish immediately</span>
           <button
