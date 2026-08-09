@@ -32,13 +32,35 @@ export async function getMessages(chatId) {
 export async function sendMessage(chatId, adminId, message) {
   const { error: msgError } = await supabase
     .from("support_messages")
-    .insert({ chat_id: chatId, sender_type: "admin", sender_id: adminId, message });
+    .insert({ chat_id: chatId, sender_type: "admin", sender_id: adminId, message, message_type: "text" });
   if (msgError) throw new Error(msgError.message);
-
   await supabase
     .from("support_chats")
     .update({ last_message_at: new Date().toISOString() })
     .eq("id", chatId);
+}
+
+export async function sendOptionsMessage(chatId, adminId, prompt, options) {
+  const { error: msgError } = await supabase
+    .from("support_messages")
+    .insert({
+      chat_id: chatId,
+      sender_type: "admin",
+      sender_id: adminId,
+      message: prompt,
+      message_type: "options",
+      options,
+    });
+  if (msgError) throw new Error(msgError.message);
+  await supabase
+    .from("support_chats")
+    .update({ last_message_at: new Date().toISOString() })
+    .eq("id", chatId);
+}
+
+export async function deleteMessage(messageId) {
+  const { error } = await supabase.from("support_messages").delete().eq("id", messageId);
+  if (error) throw new Error(error.message);
 }
 
 export async function markChatRead(chatId) {
@@ -48,6 +70,44 @@ export async function markChatRead(chatId) {
     .eq("chat_id", chatId)
     .eq("sender_type", "user")
     .eq("read_by_admin", false);
+  if (error) throw new Error(error.message);
+}
+
+// ── Templates: quick replies + reusable option sets ──
+
+export async function getTemplates(kind) {
+  const { data, error } = await supabase
+    .from("support_templates")
+    .select("*")
+    .eq("kind", kind)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+export async function createTemplate(payload) {
+  const { data, error } = await supabase
+    .from("support_templates")
+    .insert(payload)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function updateTemplate(id, payload) {
+  const { data, error } = await supabase
+    .from("support_templates")
+    .update({ ...payload, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function deleteTemplate(id) {
+  const { error } = await supabase.from("support_templates").delete().eq("id", id);
   if (error) throw new Error(error.message);
 }
 
