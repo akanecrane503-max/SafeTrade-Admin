@@ -11,9 +11,9 @@ export default function SecurityTab({ user, onRefetch }) {
 
   const copy = {
     reset: {
-      title: 'Reset this user\u2019s password?',
-      message: 'A password reset link will be sent to their registered email.',
-      confirmLabel: 'Reset Password',
+      title: 'Send a password reset code?',
+      message: "A 6-digit code will be emailed to the user. They'll enter it themselves to set a new password — you won't see or set it.",
+      confirmLabel: 'Send Code',
       variant: 'primary',
     },
     suspend: {
@@ -39,7 +39,7 @@ export default function SecurityTab({ user, onRefetch }) {
   async function handleConfirm() {
     setLoading(true);
     try {
-      if (confirmType === 'reset') await userService.resetUserPassword(user.id);
+      if (confirmType === 'reset') await userService.resetUserPassword(user.id, user.email);
       if (confirmType === 'suspend') await userService.suspendUserLogin(user.id);
       if (confirmType === 'freeze') await userService.freezeUserAccount(user.id);
       if (confirmType === 'activate') await userService.activateUserAccount(user.id);
