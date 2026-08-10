@@ -96,11 +96,6 @@ export async function getUserById(id) {
 
     tradeMode: data.trade_mode || "neutral",
 
-    phoneNumber: data.phone_number || "",
-    phoneVerificationStatus: data.phone_verification_status || "not_linked",
-    verificationEmail: data.verification_email || "",
-    emailVerificationStatus: data.email_verification_status || "not_linked",
-
     createdAt: data.created_at,
     lastLogin: data.last_login,
     isOnline: data.is_online,
@@ -202,24 +197,54 @@ export async function deleteUser(id) {
    SECURITY
 ============================================================ */
 
-export async function resetUserPassword(id) {
-  const { data } = await api.post(`/users/${id}/reset-password`);
-  return data;
+// Sends the user a branded 6-digit code (via Supabase's Email OTP) they can
+// use, on their own device, to verify and set a new password. The admin
+// never sees or sets the password itself.
+export async function resetUserPassword(id, email) {
+  if (!email) {
+    throw new Error("Missing user email.");
+  }
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: { shouldCreateUser: false },
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+  return { success: true };
 }
 
 export async function suspendUserLogin(id) {
-  const { data } = await api.post(`/users/${id}/suspend-login`);
-  return data;
+  const { error } = await supabase
+    .from("profiles")
+    .update({ status: "suspended" })
+    .eq("id", id);
+  if (error) {
+    throw new Error(error.message);
+  }
+  return { success: true };
 }
 
 export async function freezeUserAccount(id) {
-  const { data } = await api.post(`/users/${id}/freeze`);
-  return data;
+  const { error } = await supabase
+    .from("profiles")
+    .update({ status: "frozen" })
+    .eq("id", id);
+  if (error) {
+    throw new Error(error.message);
+  }
+  return { success: true };
 }
 
 export async function activateUserAccount(id) {
-  const { data } = await api.post(`/users/${id}/reactivate`);
-  return data;
+  const { error } = await supabase
+    .from("profiles")
+    .update({ status: "active" })
+    .eq("id", id);
+  if (error) {
+    throw new Error(error.message);
+  }
+  return { success: true };
 }
 
 /* ============================================================
