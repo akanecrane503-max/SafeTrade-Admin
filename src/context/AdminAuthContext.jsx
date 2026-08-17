@@ -22,7 +22,25 @@ export function AdminAuthProvider({ children }) {
       .select('*')
       .eq('id', session.user.id)
       .maybeSingle();
-    setAdminUser(data && data.status === 'active' ? data : null);
+
+    if (data && data.status === 'active') {
+      setAdminUser(data);
+    } else {
+      // Session exists (e.g. a Google sign-in) but there's no matching
+      // active admin row — reject and sign them back out.
+      setAdminUser(null);
+      if (!data) {
+        setError('This account is not registered as an admin. Contact your main admin for access.');
+        setErrorType('error');
+      } else if (data.status === 'pending') {
+        setError("Your account is awaiting approval from a main admin. You'll be able to sign in once it's approved.");
+        setErrorType('pending');
+      } else {
+        setError('Your admin account has been suspended.');
+        setErrorType('error');
+      }
+      await supabase.auth.signOut();
+    }
     setSessionLoading(false);
   }, []);
 
@@ -77,12 +95,27 @@ export function AdminAuthProvider({ children }) {
     }
   }, []);
 
+  const signInWithGoogle = useCallback(async () => {
+    setError('');
+    setErrorType('error');
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin + '/' },
+    });
+    if (oauthError) {
+      setError(oauthError.message || 'Google sign-in failed');
+      throw oauthError;
+    }
+    // Browser navigates away to Google here; the rest is handled by
+    // onAuthStateChange + loadAdminForSession when it redirects back.
+  }, []);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setAdminUser(null);
   }, []);
 
-  const value = { adminUser, sessionLoading, signingIn, error, errorType, signIn, signOut };
+  const value = { adminUser, sessionLoading, signingIn, error, errorType, signIn, signInWithGoogle, signOut };
   return <AdminAuthContext.Provider value={value}>{children}</AdminAuthContext.Provider>;
 }
 
