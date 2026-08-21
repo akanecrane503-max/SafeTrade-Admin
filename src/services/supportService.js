@@ -58,6 +58,36 @@ export async function sendOptionsMessage(chatId, adminId, prompt, options) {
     .eq("id", chatId);
 }
 
+// ── Images ──
+
+export async function uploadChatImage(file) {
+  const ext = file.name.split(".").pop();
+  const path = `${crypto.randomUUID()}.${ext}`;
+  const { error: uploadError } = await supabase.storage
+    .from("chat-images")
+    .upload(path, file);
+  if (uploadError) throw new Error(uploadError.message);
+  const { data } = supabase.storage.from("chat-images").getPublicUrl(path);
+  return data.publicUrl;
+}
+
+export async function sendImageMessage(chatId, adminId, imageUrl) {
+  const { error: msgError } = await supabase
+    .from("support_messages")
+    .insert({
+      chat_id: chatId,
+      sender_type: "admin",
+      sender_id: adminId,
+      message: imageUrl,
+      message_type: "image",
+    });
+  if (msgError) throw new Error(msgError.message);
+  await supabase
+    .from("support_chats")
+    .update({ last_message_at: new Date().toISOString() })
+    .eq("id", chatId);
+}
+
 export async function deleteMessage(messageId) {
   const { error } = await supabase.from("support_messages").delete().eq("id", messageId);
   if (error) throw new Error(error.message);
