@@ -264,6 +264,7 @@ export default function CustomerService() {
   const scrollRef = useRef(null);
   const activeChatRef = useRef(null);
   const fileInputRef = useRef(null);
+  const textareaRef = useRef(null);
 
   useEffect(() => {
     activeChatRef.current = activeChat;
@@ -306,6 +307,15 @@ export default function CustomerService() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
+
+  // Auto-grow the reply textarea as its content changes
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = Math.min(el.scrollHeight, 160) + "px";
+    }
+  }, [input]);
 
   async function openChat(chat) {
     setActiveChat(chat);
@@ -489,7 +499,7 @@ export default function CustomerService() {
               ))}
             </div>
 
-            <form onSubmit={handleSend} className="p-4 border-t border-slate-800 flex gap-3">
+            <form onSubmit={handleSend} className="p-4 border-t border-slate-800 flex gap-3 items-end">
               <button
                 type="button"
                 onClick={() => setTemplatesOpen(true)}
@@ -514,13 +524,22 @@ export default function CustomerService() {
                 onChange={handleImageSelected}
                 className="hidden"
               />
-              <input
+              <textarea
+                ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend(e);
+                  }
+                }}
                 placeholder="Type a reply..."
-                className="input-base flex-1"
+                rows={1}
+                className="input-base flex-1 resize-none overflow-y-auto"
+                style={{ maxHeight: "160px" }}
               />
-              <button type="submit" className="btn-primary px-4 flex items-center gap-2">
+              <button type="submit" className="btn-primary px-4 flex items-center gap-2 shrink-0">
                 <Send className="w-4 h-4" />
                 Send
               </button>
