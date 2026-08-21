@@ -1,5 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Send, Circle, Trash2, MessageSquarePlus, ListChecks, X, Plus, Pencil, ImagePlus } from "lucide-react";
+import {
+  Send,
+  Circle,
+  Trash2,
+  MessageSquarePlus,
+  ListChecks,
+  X,
+  Plus,
+  Pencil,
+  ImagePlus,
+  Archive,
+  ArchiveRestore,
+  Pin,
+  PinOff,
+} from "lucide-react";
 import { supabase } from "../lib/supabase";
 import * as supportService from "../services/supportService";
 
@@ -254,6 +268,7 @@ function TemplateManager({ open, onClose, onInsertQuickReply, onSendOptions }) {
 }
 
 export default function CustomerService() {
+  const [chatTab, setChatTab] = useState("active"); // 'active' | 'archived'
   const [chats, setChats] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -270,14 +285,20 @@ export default function CustomerService() {
     activeChatRef.current = activeChat;
   }, [activeChat]);
 
-  const loadChats = useCallback(async () => {
+  const loadChats = useCallback(async (tab = chatTab) => {
     try {
-      const data = await supportService.getChats();
+      const data = await supportService.getChats(tab === "archived");
       setChats(data);
     } catch (err) {
       console.error("Failed to load chats:", err);
     }
-  }, []);
+  }, [chatTab]);
+
+  useEffect(() => {
+    setActiveChat(null);
+    setMessages([]);
+    loadChats(chatTab);
+  }, [chatTab, loadChats]);
 
   useEffect(() => {
     async function init() {
@@ -285,12 +306,11 @@ export default function CustomerService() {
       setAdminId(user?.id || null);
     }
     init();
-    loadChats();
-  }, [loadChats]);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = supportService.subscribeToAllMessages((msg) => {
-      loadChats();
+      loadChats(chatTab);
       if (msg.sender_type === "user" && msg.chat_id !== activeChatRef.current?.id) {
         playPing();
       }
@@ -302,7 +322,28 @@ export default function CustomerService() {
       }
     });
     return unsubscribe;
-  }, [loadChats]);
+  }, [loadChats, chatTab]);
+
+  // Live chat-row updates (online status, left_at, archived_at) so the
+  // sidebar and header refresh without a manual page reload.
+  useEffect(() => {
+    const unsubscribe = supportService.subscribeToChatStatus((updatedChat) => {
+      setChats((prev) => {
+        const belongsToCurrentTab =
+          chatTab === "archived" ? !!updatedChat.archived_at : !updatedChat.archived_at;
+        const exists = prev.some((c) => c.id === updatedChat.id);
+        if (!belongsToCurrentTab) {
+          return prev.filter((c) => c.id !== updatedChat.id);
+        }
+        if (exists) {
+          return prev.map((c) => (c.id === updatedChat.id ? updatedChat : c));
+        }
+        return [updatedChat, ...prev];
+      });
+      setActiveChat((prev) => (prev && prev.id === updatedChat.id ? updatedChat : prev));
+    });
+    return unsubscribe;
+  }, [chatTab]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -323,7 +364,7 @@ export default function CustomerService() {
       const msgs = await supportService.getMessages(chat.id);
       setMessages(msgs);
       await supportService.markChatRead(chat.id);
-      loadChats();
+      loadChats(chatTab);
     } catch (err) {
       console.error("Failed to load messages:", err);
     }
@@ -369,6 +410,58 @@ export default function CustomerService() {
     }
   }
 
+  async function handleTogglePin(message) {
+    const nextPinned = !message.pinned;
+    try {
+      await supportService.pinMessage(message.id, nextPinned);
+      setMessages((prev) =>
+        prev.map((m) => (m.id === message.id ? { ...m, pinned: nextPinned } : m))
+      );
+    } catch (err) {
+      console.error("Failed to toggle pin:", err);
+    }
+  }
+
+  async function handleArchiveChat() {
+    if (!activeChat) return;
+    try {
+      await supportService.archiveChat(activeChat.id);
+      setActiveChat(null);
+      setMessages([]);
+      loadChats(chatTab);
+    } catch (err) {
+      console.error("Failed to archive chat:", err);
+    }
+  }
+
+  async function handleUnarchiveChat() {
+    if (!activeChat) return;
+    try {
+      await supportService.unarchiveChat(activeChat.id);
+      setActiveChat(null);
+      setMessages([]);
+      loadChats(chatTab);
+    } catch (err) {
+      console.error("Failed to unarchive chat:", err);
+    }
+  }
+
+  async function handleDeleteChat() {
+    if (!activeChat) return;
+    const confirmed = window.confirm(
+      `Permanently delete the conversation with UID ${activeChat.uid}? This cannot be undone.`
+    );
+    if (!confirmed) return;
+    try {
+      await supportService.deleteChat(activeChat.id);
+      setActiveChat(null);
+      setMessages([]);
+      loadChats(chatTab);
+    } catch (err) {
+      console.error("Failed to delete chat:", err);
+    }
+  }
+
   function handleInsertQuickReply(body) {
     setInput(body);
     setTemplatesOpen(false);
@@ -384,12 +477,33 @@ export default function CustomerService() {
     }
   }
 
+  const pinnedMessages = messages.filter((m) => m.pinned);
+
   return (
     <div className="flex h-[calc(100vh-120px)] gap-4">
-      <div className="w-72 shrink-0 card p-3 overflow-y-auto">
-        <h3 className="text-sm font-semibold text-slate-200 px-2 mb-3">Conversations</h3>
+      <div className="w-72 shrink-0 card p-3 overflow-y-auto flex flex-col">
+        <div className="flex items-center gap-2 px-2 mb-3">
+          <button
+            onClick={() => setChatTab("active")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              chatTab === "active" ? "bg-blue-600/15 text-blue-400" : "text-slate-400 hover:bg-slate-800/60"
+            }`}
+          >
+            Active
+          </button>
+          <button
+            onClick={() => setChatTab("archived")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              chatTab === "archived" ? "bg-blue-600/15 text-blue-400" : "text-slate-400 hover:bg-slate-800/60"
+            }`}
+          >
+            Archived
+          </button>
+        </div>
         {chats.length === 0 ? (
-          <p className="text-sm text-slate-500 px-2">No conversations yet.</p>
+          <p className="text-sm text-slate-500 px-2">
+            {chatTab === "archived" ? "No archived conversations." : "No conversations yet."}
+          </p>
         ) : (
           <div className="space-y-1">
             {chats.map((chat) => (
@@ -436,14 +550,65 @@ export default function CustomerService() {
                   {activeChat.user_online ? "Online" : "Left chat"}
                 </p>
               </div>
-              <button
-                onClick={() => setTemplatesOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/60 text-slate-300 hover:bg-slate-800"
-              >
-                <ListChecks className="w-3.5 h-3.5" />
-                Templates
-              </button>
+              <div className="flex items-center gap-2">
+                {activeChat.archived_at ? (
+                  <button
+                    onClick={handleUnarchiveChat}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/60 text-slate-300 hover:bg-slate-800"
+                    title="Restore to Active"
+                  >
+                    <ArchiveRestore className="w-3.5 h-3.5" />
+                    Unarchive
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleArchiveChat}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/60 text-slate-300 hover:bg-slate-800"
+                    title="Archive conversation"
+                  >
+                    <Archive className="w-3.5 h-3.5" />
+                    Archive
+                  </button>
+                )}
+                <button
+                  onClick={handleDeleteChat}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                  title="Permanently delete conversation"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete
+                </button>
+                <button
+                  onClick={() => setTemplatesOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/60 text-slate-300 hover:bg-slate-800"
+                >
+                  <ListChecks className="w-3.5 h-3.5" />
+                  Templates
+                </button>
+              </div>
             </div>
+
+            {pinnedMessages.length > 0 && (
+              <div className="px-5 py-2.5 border-b border-slate-800 bg-slate-900/60 space-y-1.5">
+                {pinnedMessages.map((m) => (
+                  <div key={m.id} className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Pin className="w-3 h-3 text-blue-400 shrink-0" />
+                      <p className="text-xs text-slate-300 truncate">
+                        {m.message_type === "image" ? "📷 Photo" : m.message}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleTogglePin(m)}
+                      className="text-slate-500 hover:text-slate-200 shrink-0"
+                      title="Unpin"
+                    >
+                      <PinOff className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-2.5">
               {messages.map((m) => (
@@ -455,7 +620,7 @@ export default function CustomerService() {
                     <div
                       className={`px-3.5 py-3 rounded-2xl text-sm whitespace-pre-wrap ${
                         m.sender_type === "admin" ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-200"
-                      }`}
+                      } ${m.pinned ? "ring-2 ring-amber-400" : ""}`}
                     >
                       <p className="mb-2">{m.message}</p>
                       <div className="flex flex-col gap-1.5">
@@ -474,27 +639,55 @@ export default function CustomerService() {
                       <img
                         src={m.message}
                         alt="Sent attachment"
-                        className="max-w-full rounded-2xl border border-slate-800"
+                        className={`max-w-full rounded-2xl border ${
+                          m.pinned ? "border-amber-400 ring-2 ring-amber-400" : "border-slate-800"
+                        }`}
                       />
                     </a>
                   ) : (
-                    <div
-                      className={`px-3.5 py-2 rounded-2xl text-sm whitespace-pre-wrap ${
-                        m.sender_type === "admin" ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-200"
-                      }`}
-                    >
-                      {m.message}
+                    <div>
+                      {m.is_poll_answer && (
+                        <p
+                          className={`text-[11px] font-bold uppercase tracking-wide mb-1 text-blue-400 ${
+                            m.sender_type === "admin" ? "text-right" : "text-left"
+                          }`}
+                        >
+                          Poll Answer
+                        </p>
+                      )}
+                      <div
+                        className={`px-3.5 py-2 rounded-2xl text-sm whitespace-pre-wrap ${
+                          m.sender_type === "admin" ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-200"
+                        } ${m.is_poll_answer ? "ring-2 ring-blue-400" : ""} ${
+                          m.pinned ? "ring-2 ring-amber-400" : ""
+                        }`}
+                      >
+                        {m.message}
+                      </div>
                     </div>
                   )}
-                  {m.sender_type === "admin" && (
+                  <div
+                    className={`absolute top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ${
+                      m.sender_type === "admin" ? "-left-16" : "-right-16"
+                    }`}
+                  >
                     <button
-                      onClick={() => handleDeleteMessage(m.id)}
-                      className="absolute -left-7 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 transition-opacity"
-                      title="Delete message"
+                      onClick={() => handleTogglePin(m)}
+                      className={`p-1 ${m.pinned ? "text-amber-400" : "text-slate-500 hover:text-amber-400"}`}
+                      title={m.pinned ? "Unpin" : "Pin message"}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      {m.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
                     </button>
-                  )}
+                    {m.sender_type === "admin" && (
+                      <button
+                        onClick={() => handleDeleteMessage(m.id)}
+                        className="p-1 text-slate-500 hover:text-red-400"
+                        title="Delete message"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
