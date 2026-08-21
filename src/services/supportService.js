@@ -1,10 +1,13 @@
 import { supabase } from "../lib/supabase";
 
-export async function getChats() {
-  const { data, error } = await supabase
+// archived: false -> active conversations, true -> archived conversations
+export async function getChats(archived = false) {
+  let query = supabase
     .from("support_chats")
     .select("*")
     .order("last_message_at", { ascending: false });
+  query = archived ? query.not("archived_at", "is", null) : query.is("archived_at", null);
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data || [];
 }
@@ -103,6 +106,46 @@ export async function markChatRead(chatId) {
   if (error) throw new Error(error.message);
 }
 
+// ── Pinning ──
+
+export async function pinMessage(messageId, pinned) {
+  const { error } = await supabase
+    .from("support_messages")
+    .update({ pinned })
+    .eq("id", messageId);
+  if (error) throw new Error(error.message);
+}
+
+// ── Archive / Delete conversation ──
+// Archiving only hides a conversation from the active list — full history stays intact.
+// Deleting is permanent: it removes the chat's messages and the chat row itself.
+
+export async function archiveChat(chatId) {
+  const { error } = await supabase
+    .from("support_chats")
+    .update({ archived_at: new Date().toISOString() })
+    .eq("id", chatId);
+  if (error) throw new Error(error.message);
+}
+
+export async function unarchiveChat(chatId) {
+  const { error } = await supabase
+    .from("support_chats")
+    .update({ archived_at: null })
+    .eq("id", chatId);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteChat(chatId) {
+  const { error: msgError } = await supabase
+    .from("support_messages")
+    .delete()
+    .eq("chat_id", chatId);
+  if (msgError) throw new Error(msgError.message);
+  const { error } = await supabase.from("support_chats").delete().eq("id", chatId);
+  if (error) throw new Error(error.message);
+}
+
 // ── Templates: quick replies + reusable option sets ──
 
 export async function getTemplates(kind) {
@@ -160,6 +203,20 @@ export function subscribeToChat(chatId, onInsert) {
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "support_messages", filter: `chat_id=eq.${chatId}` },
       (payload) => onInsert(payload.new)
+    )
+    .subscribe();
+  return () => supabase.removeChannel(channel);
+}
+
+// Live updates for chat rows themselves (online/offline, left_at, archived_at, etc.)
+// so the sidebar and header refresh without needing a manual reload.
+export function subscribeToChatStatus(onUpdate) {
+  const channel = supabase
+    .channel("support-chats-status")
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "support_chats" },
+      (payload) => onUpdate(payload.new)
     )
     .subscribe();
   return () => supabase.removeChannel(channel);
