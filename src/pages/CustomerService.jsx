@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Send, Circle, Trash2, MessageSquarePlus, ListChecks, X, Plus, Pencil } from "lucide-react";
+import { Send, Circle, Trash2, MessageSquarePlus, ListChecks, X, Plus, Pencil, ImagePlus } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import * as supportService from "../services/supportService";
 
@@ -260,8 +260,10 @@ export default function CustomerService() {
   const [input, setInput] = useState("");
   const [adminId, setAdminId] = useState(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const scrollRef = useRef(null);
   const activeChatRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     activeChatRef.current = activeChat;
@@ -326,6 +328,25 @@ export default function CustomerService() {
       await supportService.sendMessage(activeChat.id, adminId, text);
     } catch (err) {
       console.error("Failed to send message:", err);
+    }
+  }
+
+  function handleImageButtonClick() {
+    fileInputRef.current?.click();
+  }
+
+  async function handleImageSelected(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file || !activeChat || !adminId) return;
+    setUploading(true);
+    try {
+      const url = await supportService.uploadChatImage(file);
+      await supportService.sendImageMessage(activeChat.id, adminId, url);
+    } catch (err) {
+      console.error("Failed to send image:", err);
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -422,7 +443,7 @@ export default function CustomerService() {
                 >
                   {m.message_type === "options" ? (
                     <div
-                      className={`px-3.5 py-3 rounded-2xl text-sm ${
+                      className={`px-3.5 py-3 rounded-2xl text-sm whitespace-pre-wrap ${
                         m.sender_type === "admin" ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-200"
                       }`}
                     >
@@ -438,9 +459,17 @@ export default function CustomerService() {
                         ))}
                       </div>
                     </div>
+                  ) : m.message_type === "image" ? (
+                    <a href={m.message} target="_blank" rel="noreferrer" className="block">
+                      <img
+                        src={m.message}
+                        alt="Sent attachment"
+                        className="max-w-full rounded-2xl border border-slate-800"
+                      />
+                    </a>
                   ) : (
                     <div
-                      className={`px-3.5 py-2 rounded-2xl text-sm ${
+                      className={`px-3.5 py-2 rounded-2xl text-sm whitespace-pre-wrap ${
                         m.sender_type === "admin" ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-200"
                       }`}
                     >
@@ -469,6 +498,22 @@ export default function CustomerService() {
               >
                 <MessageSquarePlus className="w-4 h-4" />
               </button>
+              <button
+                type="button"
+                onClick={handleImageButtonClick}
+                disabled={uploading}
+                className="p-2.5 rounded-xl text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 transition-colors shrink-0 disabled:opacity-50"
+                title="Send image"
+              >
+                <ImagePlus className="w-4 h-4" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageSelected}
+                className="hidden"
+              />
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
